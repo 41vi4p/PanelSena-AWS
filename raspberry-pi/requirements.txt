@@ -1,0 +1,13 @@
+# PanelSena Raspberry Pi Player Dependencies
+
+# Firebase Admin SDK
+firebase-admin>=6.5.0
+
+# VLC Python bindings
+python-vlc>=3.0.18121
+
+# HTTP requests
+requests>=2.31.0
+
+# Additional utilities
+python-dotenv>=1.0.0

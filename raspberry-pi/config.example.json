@@ -1,0 +1,8 @@
+{
+  "device_id": "",
+  "device_key": "",
+  "display_name": "Raspberry Pi Display - Main",
+  "database_url": "https://your-project-id.firebaseio.com",
+  "storage_bucket": "your-project-id.appspot.com",
+  "service_account_path": "serviceAccountKey.json"
+}
