@@ -18,6 +18,9 @@ jobs:
         run: |
           bun install
 
+      - name: Generate Prisma client
+        run: bunx prisma generate
+
       - name: Build Next.js app (Bun)
         run: bun run build
         env:
@@ -63,7 +66,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: ".next,public,package.json,bun.lockb,next.config.mjs,package.json"
+          source: ".next,public,package.json,bun.lockb,next.config.mjs,prisma,dev.db"
           target: "/home/ubuntu/panel-sena"
 
       - name: Upload env file to EC2 from repo secret
@@ -93,22 +96,26 @@ jobs:
             set -e
             cd /home/ubuntu/panel-sena
 
-            # # Ensure bun is available in this non-interactive session; prefer $HOME/.bun/bin/bun
-            # BUN_PATH=$(which bun || echo "$HOME/.bun/bin/bun")
-            # if [ ! -x "$BUN_PATH" ]; then
-            #   echo "Bun not found at $BUN_PATH, installing Bun..."
-            #   curl -fsSL https://bun.sh/install | bash -s -- --no-check || true
-            #   export PATH="$HOME/.bun/bin:$PATH"
-            #   BUN_PATH=$(which bun || echo "$HOME/.bun/bin/bun")
-            # fi
-
-            # # Install dependencies with Bun
-            # "$BUN_PATH" install
-
             # Ensure pm2 is available (install if missing)
             if ! command -v pm2 >/dev/null 2>&1; then
               sudo npm i -g pm2
             fi
+
+            # Install Prisma CLI globally if not available
+            if ! command -v prisma >/dev/null 2>&1; then
+              sudo npm i -g prisma
+            fi
+
+            # Generate Prisma client
+            npx prisma generate
+
+            # Ensure database directory exists and has proper permissions
+            mkdir -p /home/ubuntu/panel-sena/prisma
+            touch /home/ubuntu/panel-sena/dev.db
+            chmod 664 /home/ubuntu/panel-sena/dev.db
+
+            # Push database schema (creates database if it doesn't exist)
+            npx prisma db push --accept-data-loss
 
             # Start/restart the app with PM2 using the Node interpreter and the npm "start" script.
             # We use `pm2 start npm -- run start` which invokes the npm script under Node.
