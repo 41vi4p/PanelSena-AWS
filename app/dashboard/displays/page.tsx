@@ -227,7 +227,7 @@ export default function DisplaysPage() {
           <div className="flex gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2 bg-transparent hover:bg-muted">
+                <Button variant="outline" className="gap-2 bg-transparent">
                   <Filter className="w-4 h-4" />
                   <span className="hidden sm:inline">Filter</span>
                 </Button>

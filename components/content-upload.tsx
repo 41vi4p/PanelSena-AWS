@@ -24,6 +24,7 @@ export function ContentUpload({ onUpload, uploadProgress = {}, isUploading: exte
   const [category, setCategory] = useState("")
   const [internalUploadProgress, setInternalUploadProgress] = useState(0)
   const [internalIsUploading, setInternalIsUploading] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const isUploading = externalIsUploading ?? internalIsUploading
   const currentProgress = Object.values(uploadProgress)[0]?.progress ?? internalUploadProgress
@@ -42,6 +43,31 @@ export function ContentUpload({ onUpload, uploadProgress = {}, isUploading: exte
     if (file.type.startsWith('image/')) return 'image'
     if (file.type.startsWith('video/')) return 'video'
     return 'document'
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) {
+      const file = files[0]
+      setSelectedFile(file)
+      setFileName(file.name)
+    }
   }
 
   const handleUpload = async () => {
@@ -84,10 +110,21 @@ export function ContentUpload({ onUpload, uploadProgress = {}, isUploading: exte
           <CardDescription>Add images, videos, or documents to your content library</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
+          <div 
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              isDragOver 
+                ? 'border-primary bg-primary/5' 
+                : 'border-border hover:border-primary/50'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm font-medium text-foreground mb-1">Drag and drop your files here</p>
-            <p className="text-xs text-muted-foreground mb-4">or click to browse</p>
+            <p className="text-sm font-medium text-foreground mb-1">
+              {isDragOver ? 'Drop your files here' : 'Drag and drop your files here'}
+            </p>
+            <p className="text-xs text-muted-foreground mb-4">or click browse to select</p>
             <Input
               type="file"
               onChange={handleFileSelect}
@@ -95,7 +132,7 @@ export function ContentUpload({ onUpload, uploadProgress = {}, isUploading: exte
               id="file-input"
               accept="image/*,video/*,.pdf"
             />
-            <Label htmlFor="file-input" className="cursor-pointer">
+            <Label htmlFor="file-input">
               <Button variant="outline" size="sm" asChild>
                 <span>Browse Files</span>
               </Button>

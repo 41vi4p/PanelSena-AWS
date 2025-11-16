@@ -1,4 +1,4 @@
-# Display Not Showing Issue - Debug Guide
+ # Display Not Showing Issue - Debug Guide
 
 ## Issues Found and Fixed
 
