@@ -1,6 +1,3 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { Upload } from '@aws-sdk/lib-storage'
-
 export interface UploadProgress {
   progress: number
   bytesTransferred: number
@@ -13,17 +10,6 @@ export interface UploadResult {
   fullPath: string
 }
 
-// Initialize S3 client
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-  },
-})
-
-const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || ''
-
 // Upload file to AWS S3 with progress tracking
 export const uploadFile = (
   file: File,
@@ -33,54 +19,53 @@ export const uploadFile = (
 ): Promise<UploadResult> => {
   return new Promise(async (resolve, reject) => {
     try {
-      // Create unique filename
-      const timestamp = Date.now()
-      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-      const fileName = `${timestamp}_${sanitizedFileName}`
-      const storagePath = `users/${userId}/${folder}/${fileName}`
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('userId', userId)
+      formData.append('folder', folder)
 
-      // Convert File to Uint8Array for S3 upload
-      const fileBuffer = await file.arrayBuffer()
-      const fileUint8Array = new Uint8Array(fileBuffer)
+      // Create XMLHttpRequest for progress tracking
+      const xhr = new XMLHttpRequest()
 
-      // Create upload parameters
-      const uploadParams = {
-        Bucket: BUCKET_NAME,
-        Key: storagePath,
-        Body: fileUint8Array,
-        ContentType: file.type,
-        ACL: 'public-read' as const, // Make files publicly accessible
-      }
-
-      // Use the Upload class for progress tracking
-      const upload = new Upload({
-        client: s3Client,
-        params: uploadParams,
-      })
-
-      // Track progress
-      upload.on('httpUploadProgress', (progress) => {
-        if (progress.loaded && progress.total && onProgress) {
+      // Track upload progress
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
           onProgress({
-            progress: (progress.loaded / progress.total) * 100,
-            bytesTransferred: progress.loaded,
-            totalBytes: progress.total,
+            progress: (event.loaded / event.total) * 100,
+            bytesTransferred: event.loaded,
+            totalBytes: event.total,
           })
         }
-      })
+      }
 
-      // Perform upload
-      await upload.done()
+      xhr.onload = () => {
+        if (xhr.status === 200) {
+          try {
+            const response = JSON.parse(xhr.responseText)
+            resolve({
+              url: response.url,
+              storageRef: response.storageRef,
+              fullPath: response.fullPath,
+            })
+          } catch (error) {
+            reject(new Error('Invalid response format'))
+          }
+        } else {
+          try {
+            const errorResponse = JSON.parse(xhr.responseText)
+            reject(new Error(errorResponse.error || 'Upload failed'))
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`))
+          }
+        }
+      }
 
-      // Generate public URL
-      const region = process.env.AWS_REGION || 'us-east-1'
-      const url = `https://${BUCKET_NAME}.s3.${region}.amazonaws.com/${storagePath}`
+      xhr.onerror = () => {
+        reject(new Error('Network error occurred'))
+      }
 
-      resolve({
-        url,
-        storageRef: storagePath,
-        fullPath: storagePath,
-      })
+      xhr.open('POST', '/api/upload')
+      xhr.send(formData)
     } catch (error) {
       console.error('Upload error:', error)
       reject(error)
@@ -91,14 +76,20 @@ export const uploadFile = (
 // Delete file from AWS S3
 export const deleteFile = async (storageRef: string): Promise<void> => {
   try {
-    const deleteParams = {
-      Bucket: BUCKET_NAME,
-      Key: storageRef,
-    }
+    const response = await fetch('/api/delete', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ storageRef }),
+    })
 
-    await s3Client.send(new DeleteObjectCommand(deleteParams))
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Delete failed')
+    }
   } catch (error) {
-    console.error('Error deleting file:', error)
+    console.error('Delete error:', error)
     throw error
   }
 }
