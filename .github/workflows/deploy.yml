@@ -1,89 +1,119 @@
 name: Deploy to EC2
-
 on:
   push:
     branches:
       - main
-
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Bun
-      uses: oven-sh/setup-bun@v1
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: bun install
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
 
-    - name: Build application
-      run: bun build
-      env:
-        # AWS S3 Configuration
-        AWS_REGION: ${{ secrets.AWS_REGION }}
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        AWS_S3_BUCKET_NAME: ${{ secrets.AWS_S3_BUCKET_NAME }}
-        # Firebase Configuration (keeping for Auth and Firestore)
-        NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
-        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
-        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
-        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
-        NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
-        NEXT_PUBLIC_FIREBASE_DATABASE_URL: ${{ secrets.NEXT_PUBLIC_FIREBASE_DATABASE_URL }}
-        
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@v1.0.0
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          # Install necessary packages
-          sudo apt-get update
-          sudo apt-get install -y bun pm2
-
-          # Create application directory if it doesn't exist
-          mkdir -p /home/ubuntu/panel-sena
-    - name: build project 
-      env: ${{ secrets.ENV }}
-      run: |
-        bun run build 
-
-
-    - name: Copy files to EC2
-      uses: appleboy/scp-action@v0.1.4
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        source: ".bun,public,package.json,bun.lockb,node_modules"
-        target: "/home/ubuntu/panel-sena"
-
-    - name: Setup application on EC2
-      uses: appleboy/ssh-action@v1.0.0
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          cd /home/ubuntu/panel-sena
-          # Install dependencies
+      - name: Install dependencies (CI) with Bun
+        run: |
           bun install
-          # Start or restart the application using PM2
-          pm2 start --name panel-sena --interpreter bun -- run start || pm2 restart panel-sena
-          pm2 save  
-          
-    - name: Verify deployment
-      run: |
-        sleep 15
-        if curl -f ${{ secrets.EC2_HOST }}:3000 > /dev/null 2>&1; then
-          echo "✅ Deployment successful! Application is running on ${{ secrets.EC2_HOST }}:3000"
-        else
-          echo "❌ Deployment failed! Application is not responding"
-          exit 1
-        fi
+
+      - name: Build Next.js app (Bun)
+        run: bun run build
+        env:
+          # pass through any NEXT_* or other build-time secrets here if needed
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+          NEXT_PUBLIC_FIREBASE_DATABASE_URL: ${{ secrets.NEXT_PUBLIC_FIREBASE_DATABASE_URL }}
+
+      - name: Ensure remote directory exists and prerequisites (remote)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            # Create app dir
+            mkdir -p /home/ubuntu/panel-sena
+            # Ensure Node (for pm2), Bun and pm2 are available (install if missing)
+            if ! command -v node >/dev/null 2>&1; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+            if ! command -v pm2 >/dev/null 2>&1; then
+              sudo npm i -g pm2
+            fi
+            if ! command -v bun >/dev/null 2>&1; then
+              # Install Bun using the official install script and add to PATH for this session
+              curl -fsSL https://bun.sh/install | bash -s -- --no-check || true
+              export PATH="$HOME/.bun/bin:$PATH"
+            fi
+
+      - name: Copy build artifacts to EC2
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: ".next,public,package.json,bun.lockb,next.config.mjs,package.json"
+          target: "/home/ubuntu/panel-sena"
+
+      - name: Upload env file to EC2 from repo secret
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            # Write environment file from repository secret to remote app dir
+            # The repository must define the secret named `ENV` containing the full .env content
+            if [ -z "${{ secrets.ENV }}" ]; then
+              echo "WARNING: ENV is empty or not set. Skipping env file creation."
+            else
+              printf '%s' "${{ secrets.ENV }}" > /home/ubuntu/panel-sena/.env
+              chmod 600 /home/ubuntu/panel-sena/.env
+            fi
+
+      - name: Install production dependencies and start with PM2 (remote)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/panel-sena
+            # Install dependencies with Bun 
+            bun install 
+
+            # Start/restart the app with PM2 using Bun as the interpreter so the 'start' script runs under Bun.
+            BUN_PATH=$(which bun || echo "/home/ubuntu/.bun/bin/bun")
+            if pm2 describe panel-sena >/dev/null 2>&1; then
+              pm2 restart panel-sena --update-env
+            else
+              pm2 start --name panel-sena --interpreter "$BUN_PATH" -- run start --update-env || \
+                pm2 start --name panel-sena --interpreter bun -- run start --update-env
+            fi
+            pm2 save
+
+      - name: Verify deployment
+        run: |
+          sleep 10
+          if curl -f http://${{ secrets.EC2_HOST }}:3000/ > /dev/null 2>&1; then
+            echo "Deployment successful! Application is running on http://${{ secrets.EC2_HOST }}:3000"
+          else
+            echo "❌Deployment failed! Application is not responding"
+            exit 1
+          fi
+
+# Required repository secrets:
+# - EC2_HOST: public IP or hostname of the EC2 instance
+# - EC2_USERNAME: SSH user (e.g. ubuntu)
+# - EC2_SSH_KEY: private key (PEM) for SSH access
+# - ENV_FILE_CONTENT: full contents of the env file to write to /.env.production on the remote
+# Optional build-time NEXT_* secrets kept earlier (Firebase, AWS, etc.)
