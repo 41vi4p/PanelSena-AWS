@@ -3,6 +3,9 @@
   "device_key": "",
   "display_name": "Raspberry Pi Display - Main",
   "database_url": "https://your-project-id.firebaseio.com",
-  "storage_bucket": "your-project-id.appspot.com",
-  "service_account_path": "serviceAccountKey.json"
+  "service_account_path": "serviceAccountKey.json",
+  "aws_access_key_id": "your-aws-access-key-id",
+  "aws_secret_access_key": "your-aws-secret-access-key",
+  "aws_region": "us-east-1",
+  "aws_s3_bucket_name": "your-s3-bucket-name"
 }

@@ -14,7 +14,8 @@ import requests
 from datetime import datetime
 from pathlib import Path
 import firebase_admin
-from firebase_admin import credentials, db, storage, firestore
+from firebase_admin import credentials, db, firestore
+import boto3
 import vlc
 
 # Configuration
@@ -101,23 +102,30 @@ class PanelSenaPlayer:
             return json.load(f)
 
     def init_firebase(self):
-        """Initialize Firebase Admin SDK"""
+        """Initialize Firebase Admin SDK and AWS S3"""
         try:
-            # Initialize with service account
+            # Initialize Firebase (keeping for database and auth)
             cred = credentials.Certificate(self.config.get("service_account_path"))
             firebase_admin.initialize_app(cred, {
-                'databaseURL': self.config.get("database_url"),
-                'storageBucket': self.config.get("storage_bucket")
+                'databaseURL': self.config.get("database_url")
             })
 
-            # Get database and storage references
+            # Get database reference
             self.db = db
-            self.storage_bucket = storage.bucket()
             self.firestore_db = firestore.client()
 
-            print("[INFO] Firebase initialized successfully")
+            # Initialize AWS S3 client
+            self.s3_client = boto3.client(
+                's3',
+                aws_access_key_id=self.config.get("aws_access_key_id"),
+                aws_secret_access_key=self.config.get("aws_secret_access_key"),
+                region_name=self.config.get("aws_region", "us-east-1")
+            )
+            self.s3_bucket_name = self.config.get("aws_s3_bucket_name")
+
+            print("[INFO] Firebase and AWS S3 initialized successfully")
         except Exception as e:
-            print(f"[ERROR] Failed to initialize Firebase: {e}")
+            print(f"[ERROR] Failed to initialize services: {e}")
             sys.exit(1)
 
     def authenticate_device(self):
@@ -491,7 +499,7 @@ class PanelSenaPlayer:
         return type_extensions.get(content_type, '.mp4')
 
     def download_content(self, storage_path, local_path):
-        """Download content from Firebase Storage"""
+        """Download content from AWS S3"""
         try:
             print(f"[INFO] Downloading: {storage_path}")
             
@@ -506,10 +514,9 @@ class PanelSenaPlayer:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
             else:
-                # It's a blob path, use Firebase Storage SDK
-                print(f"[INFO] Downloading from blob path...")
-                blob = self.storage_bucket.blob(storage_path)
-                blob.download_to_filename(local_path)
+                # It's an S3 key, download from S3
+                print(f"[INFO] Downloading from S3...")
+                self.s3_client.download_file(self.s3_bucket_name, storage_path, local_path)
             
             print(f"[INFO] Downloaded to: {local_path}")
             return True

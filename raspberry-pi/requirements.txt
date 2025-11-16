@@ -1,7 +1,10 @@
 # PanelSena Raspberry Pi Player Dependencies
 
-# Firebase Admin SDK
+# Firebase Admin SDK (for database and auth)
 firebase-admin>=6.5.0
+
+# AWS SDK for S3
+boto3>=1.34.0
 
 # VLC Python bindings
 python-vlc>=3.0.18121

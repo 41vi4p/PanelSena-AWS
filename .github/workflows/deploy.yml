@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
+
 
 jobs:
   build-and-deploy:
@@ -13,12 +13,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'bun'
+    
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v1
 
     - name: Install dependencies
       run: bun install
@@ -26,56 +23,37 @@ jobs:
     - name: Build application
       run: bun build
       env:
+        # AWS S3 Configuration
+        AWS_REGION: ${{ secrets.AWS_REGION }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_S3_BUCKET_NAME: ${{ secrets.AWS_S3_BUCKET_NAME }}
+        # Firebase Configuration (keeping for Auth and Firestore)
         NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
         NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
         NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
-        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
         NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
         NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
-
-    - name: Create deployment package
-      run: |
-        tar -czf panel-sena-build.tar.gz \
-          .next \
-          public \
-          package.json \
-          bun-lock.yaml \
-          next.config.mjs \
-          postcss.config.mjs \
-          tailwind.config.ts \
-          tsconfig.json \
-          app/ \
-          components/ \
-          lib/ \
-          hooks/ \
-          styles/
-
+        NEXT_PUBLIC_FIREBASE_DATABASE_URL: ${{ secrets.NEXT_PUBLIC_FIREBASE_DATABASE_URL }}
+        
     - name: Deploy to EC2
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
-        port: ${{ secrets.EC2_PORT || 22 }}
         script: |
-          # Create backup of current deployment
-          if [ -d "/home/ubuntu/panel-sena" ]; then
-            echo "Creating backup..."
-            sudo cp -r /home/ubuntu/panel-sena /home/ubuntu/panel-sena-backup-$(date +%Y%m%d_%H%M%S)
-          fi
+          # Install necessary packages
+          sudo apt-get update
+          sudo apt-get install -y bun pm2
 
-          # Stop existing application
-          if systemctl is-active --quiet panel-sena; then
-            echo "Stopping existing application..."
-            sudo systemctl stop panel-sena
-          fi
+          # Create application directory if it doesn't exist
+          mkdir -p /home/ubuntu/panel-sena
+    - name: build project 
+      env: ${{ secrets.ENV }}
+      run: |
+        bun run build 
 
-          # Clean up old deployment
-          sudo rm -rf /home/ubuntu/panel-sena
-
-          # Create application directory
-          sudo mkdir -p /home/ubuntu/panel-sena
-          sudo chown ubuntu:ubuntu /home/ubuntu/panel-sena
 
     - name: Copy files to EC2
       uses: appleboy/scp-action@v0.1.4
@@ -83,8 +61,7 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
-        port: ${{ secrets.EC2_PORT || 22 }}
-        source: "panel-sena-build.tar.gz"
+        source: ".bun,public,package.json,bun.lockb,node_modules"
         target: "/home/ubuntu/panel-sena"
 
     - name: Setup application on EC2
@@ -93,73 +70,14 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
-        port: ${{ secrets.EC2_PORT || 22 }}
         script: |
           cd /home/ubuntu/panel-sena
-
-          # Extract deployment package
-          tar -xzf panel-sena-build.tar.gz
-          rm panel-sena-build.tar.gz
-
-          # Install Node.js and bun if not already installed
-          if ! command -v node &> /dev/null; then
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-            sudo apt-get install -y nodejs
-          fi
-
-          if ! command -v bun &> /dev/null; then
-            npm install -g bun
-          fi
-
           # Install dependencies
-          bun install --frozen-lockfile --prod
-
-          # Create environment file
-          cat > .env.local << EOF
-          NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
-          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
-          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
-          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
-          NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
-          FIREBASE_SERVICE_ACCOUNT_KEY=${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
-          EOF
-
-          # Create systemd service file
-          sudo tee /etc/systemd/system/panel-sena.service > /dev/null << EOF
-          [Unit]
-          Description=PanelSena Digital Signage
-          After=network.target
-
-          [Service]
-          Type=simple
-          User=ubuntu
-          WorkingDirectory=/home/ubuntu/panel-sena
-          ExecStart=/usr/bin/bun start
-          Restart=always
-          RestartSec=10
-          Environment=NODE_ENV=production
-
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-
-          # Reload systemd and start service
-          sudo systemctl daemon-reload
-          sudo systemctl enable panel-sena
-          sudo systemctl start panel-sena
-
-          # Wait for application to start
-          sleep 10
-
-          # Check if application is running
-          if curl -f http://localhost:3000 > /dev/null 2>&1; then
-            echo "Application deployed successfully!"
-          else
-            echo "Application failed to start"
-            exit 1
-          fi
-
+          bun install
+          # Start or restart the application using PM2
+          pm2 start --name panel-sena --interpreter bun -- run start || pm2 restart panel-sena
+          pm2 save  
+          
     - name: Verify deployment
       run: |
         sleep 15

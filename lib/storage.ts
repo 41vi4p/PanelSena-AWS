@@ -1,11 +1,5 @@
-import {
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-  deleteObject,
-  UploadTaskSnapshot,
-} from 'firebase/storage'
-import { storage } from './firebase'
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { Upload } from '@aws-sdk/lib-storage'
 
 export interface UploadProgress {
   progress: number
@@ -19,67 +13,90 @@ export interface UploadResult {
   fullPath: string
 }
 
-// Upload file to Firebase Storage with progress tracking
+// Initialize S3 client
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+  },
+})
+
+const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || ''
+
+// Upload file to AWS S3 with progress tracking
 export const uploadFile = (
   file: File,
   userId: string,
   folder: 'images' | 'videos' | 'documents',
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
-  return new Promise((resolve, reject) => {
-    // Create unique filename
-    const timestamp = Date.now()
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-    const fileName = `${timestamp}_${sanitizedFileName}`
-    const storagePath = `users/${userId}/${folder}/${fileName}`
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Create unique filename
+      const timestamp = Date.now()
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+      const fileName = `${timestamp}_${sanitizedFileName}`
+      const storagePath = `users/${userId}/${folder}/${fileName}`
 
-    // Create storage reference
-    const storageRef = ref(storage, storagePath)
+      // Convert File to Uint8Array for S3 upload
+      const fileBuffer = await file.arrayBuffer()
+      const fileUint8Array = new Uint8Array(fileBuffer)
 
-    // Upload file
-    const uploadTask = uploadBytesResumable(storageRef, file)
-
-    uploadTask.on(
-      'state_changed',
-      (snapshot: UploadTaskSnapshot) => {
-        // Calculate progress
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-
-        if (onProgress) {
-          onProgress({
-            progress,
-            bytesTransferred: snapshot.bytesTransferred,
-            totalBytes: snapshot.totalBytes,
-          })
-        }
-      },
-      (error) => {
-        console.error('Upload error:', error)
-        reject(error)
-      },
-      async () => {
-        try {
-          // Get download URL
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref)
-
-          resolve({
-            url: downloadURL,
-            storageRef: storagePath,
-            fullPath: uploadTask.snapshot.ref.fullPath,
-          })
-        } catch (error) {
-          reject(error)
-        }
+      // Create upload parameters
+      const uploadParams = {
+        Bucket: BUCKET_NAME,
+        Key: storagePath,
+        Body: fileUint8Array,
+        ContentType: file.type,
+        ACL: 'public-read' as const, // Make files publicly accessible
       }
-    )
+
+      // Use the Upload class for progress tracking
+      const upload = new Upload({
+        client: s3Client,
+        params: uploadParams,
+      })
+
+      // Track progress
+      upload.on('httpUploadProgress', (progress) => {
+        if (progress.loaded && progress.total && onProgress) {
+          onProgress({
+            progress: (progress.loaded / progress.total) * 100,
+            bytesTransferred: progress.loaded,
+            totalBytes: progress.total,
+          })
+        }
+      })
+
+      // Perform upload
+      await upload.done()
+
+      // Generate public URL
+      const region = process.env.AWS_REGION || 'us-east-1'
+      const url = `https://${BUCKET_NAME}.s3.${region}.amazonaws.com/${storagePath}`
+
+      resolve({
+        url,
+        storageRef: storagePath,
+        fullPath: storagePath,
+      })
+    } catch (error) {
+      console.error('Upload error:', error)
+      reject(error)
+    }
   })
 }
 
-// Delete file from Firebase Storage
+// Delete file from AWS S3
 export const deleteFile = async (storageRef: string): Promise<void> => {
   try {
-    const fileRef = ref(storage, storageRef)
-    await deleteObject(fileRef)
+    const deleteParams = {
+      Bucket: BUCKET_NAME,
+      Key: storageRef,
+    }
+
+    await s3Client.send(new DeleteObjectCommand(deleteParams))
   } catch (error) {
     console.error('Error deleting file:', error)
     throw error
