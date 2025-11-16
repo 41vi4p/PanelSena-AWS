@@ -43,6 +43,20 @@ export function useDisplays(userId: string | undefined) {
       })
       if (!response.ok) throw new Error('Failed to add display')
       const newDisplay = await response.json()
+
+      // Log activity
+      await fetch('/api/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          type: 'display',
+          action: 'Display Added',
+          description: `Added display "${newDisplay.name}"`,
+          metadata: { displayName: newDisplay.name, displayId: newDisplay.id }
+        })
+      })
+
       return newDisplay
     } catch (err) {
       console.error('Error adding display:', err)
@@ -53,11 +67,27 @@ export function useDisplays(userId: string | undefined) {
 
   const editDisplay = async (id: string, data: Partial<Display>) => {
     try {
+      const display = displays.find(d => d.id === id)
       await fetch(`/api/displays/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       })
+
+      // Log activity
+      if (userId && display) {
+        await fetch('/api/activities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            type: 'display',
+            action: 'Display Updated',
+            description: `Updated display "${display.name}"`,
+            metadata: { displayName: display.name, displayId: display.id }
+          })
+        })
+      }
     } catch (err) {
       console.error('Error updating display:', err)
       setError('Failed to update display')
@@ -67,9 +97,25 @@ export function useDisplays(userId: string | undefined) {
 
   const removeDisplay = async (id: string) => {
     try {
+      const display = displays.find(d => d.id === id)
       await fetch(`/api/displays/${id}`, {
         method: 'DELETE'
       })
+
+      // Log activity
+      if (userId && display) {
+        await fetch('/api/activities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            type: 'display',
+            action: 'Display Removed',
+            description: `Removed display "${display.name}"`,
+            metadata: { displayName: display.name, displayId: display.id }
+          })
+        })
+      }
     } catch (err) {
       console.error('Error deleting display:', err)
       setError('Failed to delete display')

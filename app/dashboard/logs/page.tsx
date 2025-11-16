@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Download, AlertCircle, CheckCircle, Info, AlertTriangle } from "lucide-react"
+import { Search, Download, AlertCircle, CheckCircle, Info, AlertTriangle, RefreshCw } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import { useActivities } from "@/hooks/use-activities"
 import { ProtectedRoute } from "@/components/protected-route"
@@ -13,7 +13,7 @@ type LogType = "all" | "info" | "warning" | "error" | "success"
 
 export default function LogsPage() {
   const { user } = useAuth()
-  const { activities, loading } = useActivities(user?.uid, 100)
+  const { activities, loading, refreshActivities } = useActivities(user?.uid, 100)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState<LogType>("all")
 
@@ -58,7 +58,7 @@ export default function LogsPage() {
     }
   }
 
-  const formatTime = (timestamp: Date) => {
+  const formatTime = (timestamp: string | Date) => {
     const date = new Date(timestamp)
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
@@ -153,6 +153,14 @@ export default function LogsPage() {
           >
             <Download className="w-4 h-4 mr-2" />
             <span className="hidden sm:inline">Export</span>
+          </Button>
+          <Button 
+            onClick={refreshActivities}
+            variant="outline"
+            className="bg-card/50 backdrop-blur-sm border-border/50 whitespace-nowrap"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
 

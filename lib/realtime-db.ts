@@ -103,6 +103,24 @@ export async function sendPlaybackCommand(
   }
 
   await set(newCommandRef, fullCommand)
+
+  // Log activity
+  try {
+    await fetch('/api/activities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        type: 'display',
+        action: 'Playback Command Sent',
+        description: `Sent ${command.type} command to display`,
+        metadata: { displayId, commandType: command.type }
+      })
+    })
+  } catch (error) {
+    console.error('Failed to log playback command activity:', error)
+  }
+
   return fullCommand.commandId
 }
 
