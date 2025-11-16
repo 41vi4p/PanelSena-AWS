@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
+import { createUser, getUserById } from './database'
 
 const googleProvider = new GoogleAuthProvider()
 
@@ -34,16 +35,14 @@ export const signUp = async (email: string, password: string, companyName: strin
       displayName: companyName,
     })
 
-    // Create user profile in Firestore
-    const userProfile: UserProfile = {
-      uid: user.uid,
+    // Create user in Prisma database
+    await createUser({
       email: user.email!,
-      companyName,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
+      name: companyName,
+    })
 
-    await setDoc(doc(db, 'users', user.uid), userProfile)
+    // Get the created user profile
+    const userProfile = await getUserProfile(user.uid)
 
     return { user, userProfile }
   } catch (error) {
@@ -58,9 +57,17 @@ export const signIn = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
     const user = userCredential.user
 
-    // Get user profile from Firestore
-    const userDoc = await getDoc(doc(db, 'users', user.uid))
-    const userProfile = userDoc.data() as UserProfile
+    // Get user profile - if it doesn't exist, create it
+    let userProfile = await getUserProfile(user.uid)
+    if (!userProfile) {
+      // Create user in Prisma database
+      await createUser({
+        email: user.email!,
+        name: user.email!.split('@')[0], // Use email prefix as name
+      })
+      // Try to get profile again
+      userProfile = await getUserProfile(user.uid)
+    }
 
     return { user, userProfile }
   } catch (error) {
@@ -75,39 +82,16 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider)
     const user = result.user
 
-    // Check if user profile exists
-    const userDoc = await getDoc(doc(db, 'users', user.uid))
-
-    let userProfile: UserProfile
-
-    if (!userDoc.exists()) {
-      // Create new user profile if doesn't exist
-      userProfile = {
-        uid: user.uid,
+    // Get user profile - if it doesn't exist, create it
+    let userProfile = await getUserProfile(user.uid)
+    if (!userProfile) {
+      // Create user in Prisma database
+      await createUser({
         email: user.email!,
-        displayName: user.displayName || undefined,
-        companyName: 'My Company', // Default company name
-        photoURL: user.photoURL || undefined,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
-      await setDoc(doc(db, 'users', user.uid), userProfile)
-    } else {
-      userProfile = userDoc.data() as UserProfile
-      // Update photo URL and display name if they have changed
-      const needsUpdate = 
-        (user.photoURL && user.photoURL !== userProfile.photoURL) ||
-        (user.displayName && user.displayName !== userProfile.displayName)
-      
-      if (needsUpdate) {
-        userProfile.photoURL = user.photoURL || userProfile.photoURL
-        userProfile.displayName = user.displayName || userProfile.displayName
-        await updateDoc(doc(db, 'users', user.uid), {
-          photoURL: user.photoURL,
-          displayName: user.displayName,
-          updatedAt: new Date().toISOString(),
-        })
-      }
+        name: user.displayName || user.email!.split('@')[0],
+      })
+      // Try to get profile again
+      userProfile = await getUserProfile(user.uid)
     }
 
     return { user, userProfile }
@@ -130,14 +114,25 @@ export const signOut = async () => {
 // Get user profile
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   try {
-    const userDoc = await getDoc(doc(db, 'users', uid))
-    if (userDoc.exists()) {
-      return userDoc.data() as UserProfile
+    // Call API route instead of direct database access
+    const response = await fetch(`/api/user/profile?uid=${encodeURIComponent(uid)}`)
+
+    if (response.status === 404) {
+      // User doesn't exist in database, create them
+      // We need to get basic user info from Firebase Auth
+      // For now, return null and let the calling code handle user creation
+      return null
     }
-    return null
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user profile: ${response.statusText}`)
+    }
+
+    const userProfile = await response.json()
+    return userProfile
   } catch (error) {
     console.error('Error getting user profile:', error)
-    throw error
+    return null
   }
 }
 

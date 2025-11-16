@@ -1,12 +1,5 @@
 import { useState, useEffect } from 'react'
 import { ContentItem } from '@/lib/types'
-import {
-  createContent,
-  updateContent,
-  deleteContent,
-  subscribeToContent,
-  createActivity,
-} from '@/lib/firestore'
 import { uploadFile, deleteFile, UploadProgress } from '@/lib/storage'
 
 export function useContent(userId: string | undefined) {
@@ -21,16 +14,25 @@ export function useContent(userId: string | undefined) {
       return
     }
 
-    setLoading(true)
-
-    // Subscribe to realtime updates
-    const unsubscribe = subscribeToContent(userId, (updatedContent) => {
-      setContent(updatedContent)
-      setLoading(false)
-    })
-
-    return () => unsubscribe()
+    loadContent()
   }, [userId])
+
+  const loadContent = async () => {
+    if (!userId) return
+
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/content?userId=${encodeURIComponent(userId)}`)
+      if (!response.ok) throw new Error('Failed to load content')
+      const contentData = await response.json()
+      setContent(contentData)
+    } catch (error) {
+      console.error('Error loading content:', error)
+      setError('Failed to load content')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const uploadContent = async (
     file: File,
@@ -64,14 +66,23 @@ export function useContent(userId: string | undefined) {
         storageRef: uploadResult.storageRef,
       }
 
-      const newContent = await createContent(userId, contentData)
+      const newContent = await fetch('/api/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, ...contentData })
+      }).then(res => res.json())
 
       // Log upload activity
-      await createActivity(userId, {
-        type: 'content',
-        action: 'Content Uploaded',
-        description: `Uploaded ${type} "${file.name}"`,
-        metadata: { contentName: file.name, contentType: type, category }
+      await fetch('/api/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          type: 'content',
+          action: 'Content Uploaded',
+          description: `Uploaded ${type} "${file.name}"`,
+          metadata: { contentName: file.name, contentType: type, category }
+        })
       })
 
       // Clear upload progress
@@ -87,11 +98,16 @@ export function useContent(userId: string | undefined) {
       setError('Failed to upload content')
       
       // Log error
-      await createActivity(userId, {
-        type: 'system',
-        action: 'Content Upload Error',
-        description: `Failed to upload ${type}: ${err}`,
-        metadata: { error: String(err), fileName: file.name }
+      await fetch('/api/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          type: 'system',
+          action: 'Content Upload Error',
+          description: `Failed to upload ${type}: ${err}`,
+          metadata: { error: String(err), fileName: file.name }
+        })
       }).catch(console.error)
       
       throw err
@@ -109,26 +125,38 @@ export function useContent(userId: string | undefined) {
       // Delete file from storage
       await deleteFile(contentItem.storageRef)
 
-      // Delete metadata from Firestore
-      await deleteContent(contentItem.id)
-      
+      // Delete metadata from database
+      await fetch(`/api/content/${contentItem.id}`, {
+        method: 'DELETE'
+      })
+
       // Log deletion activity
-      await createActivity(userId, {
-        type: 'content',
-        action: 'Content Deleted',
-        description: `Deleted ${contentItem.type} "${contentItem.name}"`,
-        metadata: { contentName: contentItem.name, contentType: contentItem.type }
+      await fetch('/api/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          type: 'content',
+          action: 'Content Deleted',
+          description: `Deleted ${contentItem.type} "${contentItem.name}"`,
+          metadata: { contentName: contentItem.name, contentType: contentItem.type }
+        })
       })
     } catch (err) {
       console.error('Error deleting content:', err)
       setError('Failed to delete content')
       
       // Log error
-      await createActivity(userId, {
-        type: 'system',
-        action: 'Content Delete Error',
-        description: `Failed to delete content: ${err}`,
-        metadata: { error: String(err), contentId }
+      await fetch('/api/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          type: 'system',
+          action: 'Content Delete Error',
+          description: `Failed to delete content: ${err}`,
+          metadata: { error: String(err), contentId }
+        })
       }).catch(console.error)
       
       throw err
@@ -137,7 +165,11 @@ export function useContent(userId: string | undefined) {
 
   const editContent = async (id: string, data: Partial<ContentItem>) => {
     try {
-      await updateContent(id, data)
+      await fetch(`/api/content/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
     } catch (err) {
       console.error('Error updating content:', err)
       setError('Failed to update content')
@@ -153,6 +185,7 @@ export function useContent(userId: string | undefined) {
     uploadContent,
     removeContent,
     editContent,
+    refreshContent: loadContent,
   }
 }
 

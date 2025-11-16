@@ -1,0 +1,167 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  displays   Display[]
+  content    ContentItem[]
+  schedules  Schedule[]
+  activities Activity[]
+  analytics  Analytics[]
+
+  @@map("users")
+}
+
+model Display {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  location    String
+  status      DisplayStatus @default(OFFLINE)
+  resolution  String
+  uptime      String   @default("0h 0m")
+  brightness  Int      @default(50)
+  orientation Orientation @default(LANDSCAPE)
+  lastUpdate  DateTime @default(now())
+  group       String   @default("default")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Realtime status fields
+  volume       Int?
+  currentContent Json?
+  schedule     Json?
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("displays")
+}
+
+model ContentItem {
+  id         String      @id @default(cuid())
+  userId     String
+  name       String
+  type       ContentType
+  size       String
+  sizeBytes  Int
+  uploadDate DateTime    @default(now())
+  category   String
+  thumbnail  String?
+  url        String
+  storageRef String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  // Relations
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("content")
+}
+
+model Schedule {
+  id         String         @id @default(cuid())
+  userId     String
+  name       String
+  displayIds String         // JSON array of display IDs
+  contentIds String         // JSON array of content IDs
+  startDate  DateTime
+  endDate    DateTime
+  startTime  String
+  endTime    String
+  repeat     ScheduleRepeat @default(ONCE)
+  status     ScheduleStatus @default(ACTIVE)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  // Relations
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("schedules")
+}
+
+model Activity {
+  id          String     @id @default(cuid())
+  userId      String
+  type        ActivityType
+  action      String
+  description String
+  metadata    Json?
+  timestamp   DateTime   @default(now())
+
+  // Relations
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("activities")
+}
+
+model Analytics {
+  id        String  @id @default(cuid())
+  userId    String
+  displayId String?
+  contentId String?
+  metric    String
+  value     Float
+  timestamp DateTime @default(now())
+  date      String
+
+  // Relations
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("analytics")
+}
+
+// Enums
+enum DisplayStatus {
+  ONLINE
+  OFFLINE
+  PLAYING
+  PAUSED
+}
+
+enum Orientation {
+  LANDSCAPE
+  PORTRAIT
+}
+
+enum ContentType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+enum ScheduleRepeat {
+  ONCE
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum ScheduleStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum ActivityType {
+  DISPLAY
+  CONTENT
+  SCHEDULE
+  SYSTEM
+}

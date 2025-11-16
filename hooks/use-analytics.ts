@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { Analytics } from '@/lib/types'
-import { createAnalytics, getUserAnalytics } from '@/lib/firestore'
 
 export function useAnalytics(
   userId: string | undefined,
@@ -20,7 +19,13 @@ export function useAnalytics(
     const loadAnalytics = async () => {
       setLoading(true)
       try {
-        const data = await getUserAnalytics(userId, startDate, endDate)
+        const params = new URLSearchParams({ userId })
+        if (startDate) params.append('startDate', startDate)
+        if (endDate) params.append('endDate', endDate)
+
+        const response = await fetch(`/api/analytics?${params}`)
+        if (!response.ok) throw new Error('Failed to load analytics')
+        const data = await response.json()
         setAnalytics(data)
       } catch (err) {
         console.error('Error loading analytics:', err)
@@ -49,7 +54,13 @@ export function useAnalytics(
         contentId,
       }
 
-      const newAnalytic = await createAnalytics(userId, analyticsData)
+      const response = await fetch('/api/analytics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, ...analyticsData })
+      })
+      if (!response.ok) throw new Error('Failed to track metric')
+      const newAnalytic = await response.json()
       setAnalytics((prev) => [newAnalytic, ...prev])
       return newAnalytic
     } catch (err) {
