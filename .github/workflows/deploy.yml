@@ -93,17 +93,17 @@ jobs:
             set -e
             cd /home/ubuntu/panel-sena
 
-            # Ensure bun is available in this non-interactive session; prefer $HOME/.bun/bin/bun
-            BUN_PATH=$(which bun || echo "$HOME/.bun/bin/bun")
-            if [ ! -x "$BUN_PATH" ]; then
-              echo "Bun not found at $BUN_PATH, installing Bun..."
-              curl -fsSL https://bun.sh/install | bash -s -- --no-check || true
-              export PATH="$HOME/.bun/bin:$PATH"
-              BUN_PATH=$(which bun || echo "$HOME/.bun/bin/bun")
-            fi
+            # # Ensure bun is available in this non-interactive session; prefer $HOME/.bun/bin/bun
+            # BUN_PATH=$(which bun || echo "$HOME/.bun/bin/bun")
+            # if [ ! -x "$BUN_PATH" ]; then
+            #   echo "Bun not found at $BUN_PATH, installing Bun..."
+            #   curl -fsSL https://bun.sh/install | bash -s -- --no-check || true
+            #   export PATH="$HOME/.bun/bin:$PATH"
+            #   BUN_PATH=$(which bun || echo "$HOME/.bun/bin/bun")
+            # fi
 
-            # Install dependencies with Bun
-            "$BUN_PATH" install
+            # # Install dependencies with Bun
+            # "$BUN_PATH" install
 
             # Ensure pm2 is available (install if missing)
             if ! command -v pm2 >/dev/null 2>&1; then
