@@ -52,6 +52,10 @@ jobs:
               curl -fsSL https://bun.sh/install | bash -s -- --no-check || true
               export PATH="$HOME/.bun/bin:$PATH"
             fi
+            # Make bun available system-wide for non-interactive sessions (symlink)
+            if [ -f "$HOME/.bun/bin/bun" ]; then
+              sudo ln -sf "$HOME/.bun/bin/bun" /usr/local/bin/bun || true
+            fi
 
       - name: Copy build artifacts to EC2
         uses: appleboy/scp-action@v0.1.4
@@ -88,16 +92,30 @@ jobs:
           script: |
             set -e
             cd /home/ubuntu/panel-sena
-            # Install dependencies with Bun 
-            bun install 
+
+            # Ensure bun is available in this non-interactive session; prefer $HOME/.bun/bin/bun
+            BUN_PATH=$(which bun || echo "$HOME/.bun/bin/bun")
+            if [ ! -x "$BUN_PATH" ]; then
+              echo "Bun not found at $BUN_PATH, installing Bun..."
+              curl -fsSL https://bun.sh/install | bash -s -- --no-check || true
+              export PATH="$HOME/.bun/bin:$PATH"
+              BUN_PATH=$(which bun || echo "$HOME/.bun/bin/bun")
+            fi
+
+            # Install dependencies with Bun
+            "$BUN_PATH" install
+
+            # Ensure pm2 is available (install if missing)
+            if ! command -v pm2 >/dev/null 2>&1; then
+              sudo npm i -g pm2
+            fi
 
             # Start/restart the app with PM2 using Bun as the interpreter so the 'start' script runs under Bun.
-            BUN_PATH=$(which bun || echo "/home/ubuntu/.bun/bin/bun")
             if pm2 describe panel-sena >/dev/null 2>&1; then
               pm2 restart panel-sena --update-env
             else
               pm2 start --name panel-sena --interpreter "$BUN_PATH" -- run start --update-env || \
-                pm2 start --name panel-sena --interpreter bun -- run start --update-env
+                pm2 start --name panel-sena --interpreter "$BUN_PATH" -- run start --update-env
             fi
             pm2 save
 
@@ -115,5 +133,5 @@ jobs:
 # - EC2_HOST: public IP or hostname of the EC2 instance
 # - EC2_USERNAME: SSH user (e.g. ubuntu)
 # - EC2_SSH_KEY: private key (PEM) for SSH access
-# - ENV_FILE_CONTENT: full contents of the env file to write to /.env.production on the remote
+# - ENV: full contents of the env file to write to /.env.production on the remote
 # Optional build-time NEXT_* secrets kept earlier (Firebase, AWS, etc.)
