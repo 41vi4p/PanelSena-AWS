@@ -110,12 +110,13 @@ jobs:
               sudo npm i -g pm2
             fi
 
-            # Start/restart the app with PM2 using Bun as the interpreter so the 'start' script runs under Bun.
+            # Start/restart the app with PM2 using the Node interpreter and the npm "start" script.
+            # We use `pm2 start npm -- run start` which invokes the npm script under Node.
             if pm2 describe panel-sena >/dev/null 2>&1; then
-              pm2 restart panel-sena --update-env
+              pm2 restart panel-sena --update-env || true
             else
-              pm2 start --name panel-sena --interpreter "$BUN_PATH" -- run start --update-env || \
-                pm2 start --name panel-sena --interpreter "$BUN_PATH" -- run start --update-env
+              pm2 start npm --name panel-sena --interpreter node -- run start --update-env || \
+                pm2 start npm --name panel-sena --interpreter node -- run start --update-env
             fi
             pm2 save
 
