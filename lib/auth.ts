@@ -57,17 +57,8 @@ export const signIn = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
     const user = userCredential.user
 
-    // Get user profile - if it doesn't exist, create it
-    let userProfile = await getUserProfile(user.uid)
-    if (!userProfile) {
-      // Create user in Prisma database
-      await createUser({
-        email: user.email!,
-        name: user.email!.split('@')[0], // Use email prefix as name
-      })
-      // Try to get profile again
-      userProfile = await getUserProfile(user.uid)
-    }
+    // Get user profile (will create user if they don't exist)
+    const userProfile = await getUserProfile(user.uid, user.email!, user.displayName || user.email!.split('@')[0])
 
     return { user, userProfile }
   } catch (error) {
@@ -82,17 +73,8 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider)
     const user = result.user
 
-    // Get user profile - if it doesn't exist, create it
-    let userProfile = await getUserProfile(user.uid)
-    if (!userProfile) {
-      // Create user in Prisma database
-      await createUser({
-        email: user.email!,
-        name: user.displayName || user.email!.split('@')[0],
-      })
-      // Try to get profile again
-      userProfile = await getUserProfile(user.uid)
-    }
+    // Get user profile (will create user if they don't exist)
+    const userProfile = await getUserProfile(user.uid, user.email!, user.displayName || user.email!.split('@')[0])
 
     return { user, userProfile }
   } catch (error) {
@@ -112,19 +94,20 @@ export const signOut = async () => {
 }
 
 // Get user profile
-export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
+export const getUserProfile = async (uid: string, email?: string, name?: string): Promise<UserProfile | null> => {
   try {
     // Call API route instead of direct database access
-    const response = await fetch(`/api/user/profile?uid=${encodeURIComponent(uid)}`)
+    const params = new URLSearchParams({ uid })
+    if (email) params.append('email', email)
+    if (name) params.append('name', name)
 
-    if (response.status === 404) {
-      // User doesn't exist in database, create them
-      // We need to get basic user info from Firebase Auth
-      // For now, return null and let the calling code handle user creation
-      return null
-    }
+    const response = await fetch(`/api/user/profile?${params.toString()}`)
 
     if (!response.ok) {
+      if (response.status === 404) {
+        console.log('User profile not found for uid:', uid)
+        return null
+      }
       throw new Error(`Failed to fetch user profile: ${response.statusText}`)
     }
 

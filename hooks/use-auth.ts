@@ -20,7 +20,13 @@ export function useAuth() {
 
       if (firebaseUser) {
         try {
-          const profile = await getUserProfile(firebaseUser.uid)
+          // Get user profile (will create user if they don't exist)
+          const profile = await getUserProfile(
+            firebaseUser.uid,
+            firebaseUser.email!,
+            firebaseUser.displayName || firebaseUser.email!.split('@')[0]
+          )
+          
           if (mounted.current) {
             setUserProfile(profile)
           }

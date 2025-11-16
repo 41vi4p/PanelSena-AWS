@@ -365,9 +365,10 @@ export const getUserAnalytics = async (userId: string, startDate?: string, endDa
 }
 
 // User operations
-export const createUser = async (userData: { email: string; name?: string; image?: string }) => {
+export const createUser = async (userData: { firebaseId: string; email: string; name?: string; image?: string }) => {
   const user = await prisma.user.create({
     data: {
+      firebaseId: userData.firebaseId,
       email: userData.email,
       name: userData.name,
       image: userData.image,
@@ -385,6 +386,12 @@ export const getUserByEmail = async (email: string) => {
 export const getUserById = async (id: string) => {
   return await prisma.user.findUnique({
     where: { id },
+  })
+}
+
+export const getUserByFirebaseId = async (firebaseId: string) => {
+  return await prisma.user.findUnique({
+    where: { firebaseId },
   })
 }
 

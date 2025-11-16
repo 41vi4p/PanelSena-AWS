@@ -14,14 +14,19 @@ import { Upload, CheckCircle } from "lucide-react"
 
 interface ContentUploadProps {
   onUpload: (file: File, category: string, type: 'image' | 'video' | 'document') => Promise<void>
+  uploadProgress?: Record<string, { progress: number; bytesTransferred: number; totalBytes: number }>
+  isUploading?: boolean
 }
 
-export function ContentUpload({ onUpload }: ContentUploadProps) {
+export function ContentUpload({ onUpload, uploadProgress = {}, isUploading: externalIsUploading }: ContentUploadProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileName, setFileName] = useState("")
   const [category, setCategory] = useState("")
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [isUploading, setIsUploading] = useState(false)
+  const [internalUploadProgress, setInternalUploadProgress] = useState(0)
+  const [internalIsUploading, setInternalIsUploading] = useState(false)
+
+  const isUploading = externalIsUploading ?? internalIsUploading
+  const currentProgress = Object.values(uploadProgress)[0]?.progress ?? internalUploadProgress
 
   const categories = ["Marketing", "Promotions", "Information", "Events", "Announcements", "Menus"]
 
@@ -45,8 +50,8 @@ export function ContentUpload({ onUpload }: ContentUploadProps) {
       return
     }
 
-    setIsUploading(true)
-    setUploadProgress(0)
+    setInternalIsUploading(true)
+    setInternalUploadProgress(0)
 
     try {
       const fileType = getFileType(selectedFile)
@@ -56,7 +61,7 @@ export function ContentUpload({ onUpload }: ContentUploadProps) {
       setFileName("")
       setCategory("")
       setSelectedFile(null)
-      setUploadProgress(100)
+      setInternalUploadProgress(100)
       
       // Reset file input
       const fileInput = document.getElementById('file-input') as HTMLInputElement
@@ -66,8 +71,8 @@ export function ContentUpload({ onUpload }: ContentUploadProps) {
       console.error('Upload error:', error)
       alert('Upload failed. Please try again.')
     } finally {
-      setIsUploading(false)
-      setTimeout(() => setUploadProgress(0), 2000)
+      setInternalIsUploading(false)
+      setTimeout(() => setInternalUploadProgress(0), 2000)
     }
   }
 
@@ -120,17 +125,26 @@ export function ContentUpload({ onUpload }: ContentUploadProps) {
               </div>
 
               {isUploading && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">Uploading...</p>
-                    <p className="text-sm font-medium text-foreground">{Math.round(uploadProgress)}%</p>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-sm text-muted-foreground">Uploading...</p>
+                    </div>
+                    <p className="text-sm font-medium text-foreground">{Math.round(currentProgress)}%</p>
                   </div>
                   <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
                     <div
-                      className="bg-primary h-full transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
+                      className="bg-primary h-full transition-all duration-300 ease-out"
+                      style={{ width: `${currentProgress}%` }}
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {currentProgress < 30 && "Preparing upload..."}
+                    {currentProgress >= 30 && currentProgress < 70 && "Uploading to storage..."}
+                    {currentProgress >= 70 && currentProgress < 100 && "Finalizing..."}
+                    {currentProgress === 100 && "Upload complete!"}
+                  </p>
                 </div>
               )}
 

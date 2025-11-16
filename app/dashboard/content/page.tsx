@@ -17,6 +17,8 @@ export default function ContentPage() {
   const { displays } = useDisplays(user?.uid)
   const [activeTab, setActiveTab] = useState("library")
 
+  const isUploading = Object.keys(uploadProgress).length > 0
+
   const handleUpload = async (file: File, category: string, type: 'image' | 'video' | 'document') => {
     try {
       await uploadContent(file, category, type)
@@ -130,7 +132,11 @@ export default function ContentPage() {
           </TabsContent>
 
           <TabsContent value="upload" className="mt-6">
-            <ContentUpload onUpload={handleUpload} />
+            <ContentUpload 
+              onUpload={handleUpload} 
+              uploadProgress={uploadProgress}
+              isUploading={isUploading}
+            />
           </TabsContent>
         </Tabs>
       </main>

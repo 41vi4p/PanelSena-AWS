@@ -122,11 +122,13 @@ export function useContent(userId: string | undefined) {
       const contentItem = content.find(c => c.id === contentId)
       if (!contentItem) throw new Error('Content not found')
       
-      // Delete file from storage
-      await deleteFile(contentItem.storageRef)
+      // Delete file from storage if storageRef exists
+      if (contentItem.storageRef && contentItem.storageRef.trim() !== '') {
+        await deleteFile(contentItem.storageRef)
+      }
 
       // Delete metadata from database
-      await fetch(`/api/content/${contentItem.id}`, {
+      await fetch(`/api/content?userId=${encodeURIComponent(userId)}&id=${contentItem.id}`, {
         method: 'DELETE'
       })
 
