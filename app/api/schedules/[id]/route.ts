@@ -4,13 +4,14 @@ import { updateSchedule, deleteSchedule } from '@/lib/database'
 // PUT /api/schedules/[id] - Update schedule
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const body = await request.json()
     const updateData = body
 
-    const schedule = await updateSchedule(params.id, updateData)
+    const schedule = await updateSchedule(id, updateData)
     return NextResponse.json(schedule)
   } catch (error) {
     console.error('Error updating schedule:', error)
@@ -21,10 +22,11 @@ export async function PUT(
 // DELETE /api/schedules/[id] - Delete schedule
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await deleteSchedule(params.id)
+    const { id } = await params
+    await deleteSchedule(id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting schedule:', error)

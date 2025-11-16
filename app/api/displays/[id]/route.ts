@@ -4,13 +4,14 @@ import { updateDisplay, deleteDisplay } from '@/lib/database'
 // PUT /api/displays/[id] - Update display
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const body = await request.json()
     const updateData = body
 
-    const display = await updateDisplay(params.id, updateData)
+    const display = await updateDisplay(id, updateData)
     return NextResponse.json(display)
   } catch (error) {
     console.error('Error updating display:', error)
@@ -21,10 +22,11 @@ export async function PUT(
 // DELETE /api/displays/[id] - Delete display
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await deleteDisplay(params.id)
+    const { id } = await params
+    await deleteDisplay(id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting display:', error)

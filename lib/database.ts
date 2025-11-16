@@ -171,7 +171,10 @@ export const getUserDisplays = async (userId: string) => {
     where: { userId },
     orderBy: { createdAt: 'desc' },
   })
-  return displays.map(convertDisplay)
+  // Filter out incomplete displays that haven't been properly linked
+  return displays
+    .filter((display: any) => display.name !== "Pending Link...")
+    .map(convertDisplay)
 }
 
 export const updateDisplay = async (id: string, data: Partial<Display>) => {

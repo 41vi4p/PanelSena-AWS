@@ -23,6 +23,8 @@ export default function ContentPage() {
     try {
       await uploadContent(file, category, type)
       setActiveTab("library")
+      // Refresh the page to show the new content
+      window.location.reload()
     } catch (error) {
       console.error("Upload failed:", error)
     }
@@ -31,6 +33,8 @@ export default function ContentPage() {
   const handleDelete = async (id: string) => {
     try {
       await removeContent(id)
+      // Refresh the page to remove the deleted content
+      window.location.reload()
     } catch (error) {
       console.error("Delete failed:", error)
     }
