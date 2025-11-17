@@ -106,8 +106,9 @@ jobs:
               sudo npm i -g prisma
             fi
 
-            # Install dependencies using Bun, allowing it to refresh the lockfile if needed
-            bun install --production --save-lockfile
+            # Install dependencies using Bun (delete lockfile copy to avoid frozen-lock errors on remote)
+            rm -f bun.lockb
+            bun install --production
 
 
             # Generate Prisma client
