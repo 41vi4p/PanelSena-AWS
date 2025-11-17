@@ -107,6 +107,7 @@ jobs:
             fi
 
             # Install dependencies
+            rm -f bun.lockb
             bun install --production
 
 
