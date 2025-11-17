@@ -167,7 +167,7 @@ export const createDisplay = async (userId: string, displayData: Partial<Display
 }
 
 export const getUserDisplays = async (userId: string) => {
-  const displays = await prisma.display.findMany({
+  const displays = await prisma.displays.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
   })
@@ -197,7 +197,7 @@ export const updateDisplay = async (id: string, data: Partial<Display>) => {
   if (data.currentContent !== undefined) updateData.currentContent = data.currentContent
   if (data.schedule !== undefined) updateData.schedule = data.schedule
 
-  const display = await prisma.display.update({
+  const display = await prisma.displays.update({
     where: { id },
     data: updateData,
   })
@@ -205,7 +205,7 @@ export const updateDisplay = async (id: string, data: Partial<Display>) => {
 }
 
 export const deleteDisplay = async (id: string) => {
-  await prisma.display.delete({ where: { id } })
+  await prisma.displays.delete({ where: { id } })
 }
 
 // Content operations
@@ -223,12 +223,12 @@ export const createContent = async (userId: string, contentData: Partial<Content
     storageRef: contentData.storageRef || '',
   }
 
-  const content = await prisma.contentItem.create({ data })
+  const content = await prisma.content.create({ data })
   return convertContentItem(content)
 }
 
 export const getUserContent = async (userId: string) => {
-  const content = await prisma.contentItem.findMany({
+  const content = await prisma.content.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
   })
@@ -248,7 +248,7 @@ export const updateContent = async (id: string, data: Partial<ContentItem>) => {
   if (data.url !== undefined) updateData.url = data.url
   if (data.storageRef !== undefined) updateData.storageRef = data.storageRef
 
-  const content = await prisma.contentItem.update({
+  const content = await prisma.content.update({
     where: { id },
     data: updateData,
   })
@@ -274,7 +274,7 @@ export const createSchedule = async (userId: string, scheduleData: Partial<Sched
     status: (scheduleData.status?.toUpperCase() || 'ACTIVE') as ScheduleStatus,
   }
 
-  const schedule = await prisma.schedule.create({ data })
+  const schedule = await prisma.schedules.create({ data })
   return convertSchedule(schedule)
 }
 
@@ -299,7 +299,7 @@ export const updateSchedule = async (id: string, data: Partial<Schedule>) => {
   if (data.repeat !== undefined) updateData.repeat = data.repeat.toUpperCase() as ScheduleRepeat
   if (data.status !== undefined) updateData.status = data.status.toUpperCase() as ScheduleStatus
 
-  const schedule = await prisma.schedule.update({
+  const schedule = await prisma.schedules.update({
     where: { id },
     data: updateData,
   })
@@ -307,7 +307,7 @@ export const updateSchedule = async (id: string, data: Partial<Schedule>) => {
 }
 
 export const deleteSchedule = async (id: string) => {
-  await prisma.schedule.delete({ where: { id } })
+  await prisma.schedules.delete({ where: { id } })
 }
 
 // Activity operations
@@ -321,7 +321,7 @@ export const createActivity = async (userId: string, activityData: Partial<Activ
     timestamp: activityData.timestamp ? new Date(activityData.timestamp) : new Date(),
   }
 
-  const activity = await prisma.activity.create({ data })
+  const activity = await prisma.activities.create({ data })
   return convertActivity(activity)
 }
 
@@ -369,7 +369,7 @@ export const getUserAnalytics = async (userId: string, startDate?: string, endDa
 
 // User operations
 export const createUser = async (userData: { firebaseId: string; email: string; name?: string; image?: string }) => {
-  const user = await prisma.user.create({
+  const user = await prisma.users.create({
     data: {
       firebaseId: userData.firebaseId,
       email: userData.email,
@@ -393,7 +393,7 @@ export const getUserById = async (id: string) => {
 }
 
 export const getUserByFirebaseId = async (firebaseId: string) => {
-  return await prisma.user.findUnique({
+  return await prisma.users.findUnique({
     where: { firebaseId },
   })
 }
