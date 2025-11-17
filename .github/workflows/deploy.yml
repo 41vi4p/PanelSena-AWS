@@ -106,8 +106,8 @@ jobs:
               sudo npm i -g prisma
             fi
 
-            # Install dependencies
-            npm install --production --ignore-scripts
+            # Install dependencies using Bun, allowing it to refresh the lockfile if needed
+            bun install --production --save-lockfile
 
 
             # Generate Prisma client
