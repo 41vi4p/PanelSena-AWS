@@ -120,7 +120,8 @@ jobs:
             chmod 664 /home/ubuntu/panel-sena/dev.db
 
             # Push database schema (creates database if it doesn't exist)
-            npx prisma db push --accept-data-loss
+            # Skip if database is unreachable (will need manual intervention)
+            npx prisma db push --accept-data-loss || echo "⚠️ Database push failed - check DATABASE_URL and network connectivity"
 
             # Start/restart the app with PM2 using the Node interpreter and the npm "start" script.
             # We use `pm2 start npm -- run start` which invokes the npm script under Node.

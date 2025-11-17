@@ -19,14 +19,6 @@ export function useLivePlayback(userId: string | undefined) {
 
     setLoading(true)
 
-  useEffect(() => {
-    if (!userId) {
-      setLoading(false)
-      return
-    }
-
-    setLoading(true)
-
     // Poll for display statuses every 5 seconds
     const pollDisplays = async () => {
       try {
@@ -34,10 +26,18 @@ export function useLivePlayback(userId: string | undefined) {
         setDisplays(displaysData)
         setLoading(false)
         setError(null)
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching display statuses:', err)
-        setError('Failed to fetch display statuses')
-        setLoading(false)
+        // Don't show error for AWS credential issues in development
+        if (err.name === 'UnrecognizedClientException' || err.message?.includes('security token')) {
+          console.warn('AWS DynamoDB not configured - Live playback disabled')
+          setDisplays({})
+          setLoading(false)
+          setError(null)
+        } else {
+          setError('Failed to fetch display statuses')
+          setLoading(false)
+        }
       }
     }
 
@@ -62,7 +62,6 @@ export function useLivePlayback(userId: string | undefined) {
       clearInterval(pollInterval)
       clearInterval(cleanupInterval)
     }
-  }, [userId])
   }, [userId])
 
   const sendCommand = useCallback(

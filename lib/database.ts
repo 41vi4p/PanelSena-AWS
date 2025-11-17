@@ -147,6 +147,7 @@ const convertAnalytics = (analytics: Analytics): Analytics => ({
 // Display operations
 export const createDisplay = async (userId: string, displayData: Partial<Display>) => {
   const data = {
+    id: crypto.randomUUID(),
     userId,
     name: displayData.name || '',
     location: displayData.location || '',
@@ -156,13 +157,14 @@ export const createDisplay = async (userId: string, displayData: Partial<Display
     brightness: displayData.brightness || 50,
     orientation: 'LANDSCAPE' as Orientation,
     lastUpdate: new Date(),
+    updatedAt: new Date(),
     group: displayData.group || 'default',
     volume: displayData.volume,
     currentContent: displayData.currentContent,
     schedule: displayData.schedule,
   }
 
-  const display = await prisma.display.create({ data })
+  const display = await prisma.displays.create({ data })
   return convertDisplay(display)
 }
 
@@ -211,12 +213,14 @@ export const deleteDisplay = async (id: string) => {
 // Content operations
 export const createContent = async (userId: string, contentData: Partial<ContentItem>) => {
   const data = {
+    id: crypto.randomUUID(),
     userId,
     name: contentData.name || '',
     type: (contentData.type?.toUpperCase() || 'DOCUMENT') as ContentType,
     size: contentData.size || '0 B',
     sizeBytes: contentData.sizeBytes || 0,
     uploadDate: contentData.uploadDate ? new Date(contentData.uploadDate) : new Date(),
+    updatedAt: new Date(),
     category: contentData.category || 'General',
     thumbnail: contentData.thumbnail,
     url: contentData.url || '',
@@ -256,12 +260,13 @@ export const updateContent = async (id: string, data: Partial<ContentItem>) => {
 }
 
 export const deleteContent = async (id: string) => {
-  await prisma.contentItem.delete({ where: { id } })
+  await prisma.content.delete({ where: { id } })
 }
 
 // Schedule operations
 export const createSchedule = async (userId: string, scheduleData: Partial<Schedule>) => {
   const data = {
+    id: crypto.randomUUID(),
     userId,
     name: scheduleData.name || '',
     displayIds: JSON.stringify(scheduleData.displayIds || []),
@@ -272,6 +277,7 @@ export const createSchedule = async (userId: string, scheduleData: Partial<Sched
     endTime: scheduleData.endTime || '17:00',
     repeat: (scheduleData.repeat?.toUpperCase() || 'ONCE') as ScheduleRepeat,
     status: (scheduleData.status?.toUpperCase() || 'ACTIVE') as ScheduleStatus,
+    updatedAt: new Date(),
   }
 
   const schedule = await prisma.schedules.create({ data })
@@ -279,7 +285,7 @@ export const createSchedule = async (userId: string, scheduleData: Partial<Sched
 }
 
 export const getUserSchedules = async (userId: string) => {
-  const schedules = await prisma.schedule.findMany({
+  const schedules = await prisma.schedules.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
   })
@@ -313,6 +319,7 @@ export const deleteSchedule = async (id: string) => {
 // Activity operations
 export const createActivity = async (userId: string, activityData: Partial<Activity>) => {
   const data = {
+    id: crypto.randomUUID(),
     userId,
     type: (activityData.type?.toUpperCase() || 'SYSTEM') as ActivityType,
     action: activityData.action || '',
@@ -326,7 +333,7 @@ export const createActivity = async (userId: string, activityData: Partial<Activ
 }
 
 export const getUserActivities = async (userId: string, limitCount: number = 50) => {
-  const activities = await prisma.activity.findMany({
+  const activities = await prisma.activities.findMany({
     where: { userId },
     orderBy: { timestamp: 'desc' },
     take: limitCount,
@@ -337,13 +344,14 @@ export const getUserActivities = async (userId: string, limitCount: number = 50)
 // Analytics operations
 export const createAnalytics = async (userId: string, analyticsData: Partial<Analytics>) => {
   const data = {
+    id: crypto.randomUUID(),
     userId,
     displayId: analyticsData.displayId,
     contentId: analyticsData.contentId,
     metric: analyticsData.metric || '',
     value: analyticsData.value || 0,
     timestamp: analyticsData.timestamp ? new Date(analyticsData.timestamp) : new Date(),
-    date: analyticsData.date ? new Date(analyticsData.date) : new Date(),
+    date: analyticsData.date ? new Date(analyticsData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
   }
 
   const analytics = await prisma.analytics.create({ data })
@@ -371,23 +379,25 @@ export const getUserAnalytics = async (userId: string, startDate?: string, endDa
 export const createUser = async (userData: { firebaseId: string; email: string; name?: string; image?: string }) => {
   const user = await prisma.users.create({
     data: {
+      id: crypto.randomUUID(),
       firebaseId: userData.firebaseId,
       email: userData.email,
       name: userData.name,
       image: userData.image,
+      updatedAt: new Date(),
     },
   })
   return user
 }
 
 export const getUserByEmail = async (email: string) => {
-  return await prisma.user.findUnique({
+  return await prisma.users.findUnique({
     where: { email },
   })
 }
 
 export const getUserById = async (id: string) => {
-  return await prisma.user.findUnique({
+  return await prisma.users.findUnique({
     where: { id },
   })
 }
@@ -404,7 +414,7 @@ export const updateUser = async (id: string, data: Partial<User>) => {
   if (data.name !== undefined) updateData.name = data.name
   if (data.image !== undefined) updateData.image = data.image
 
-  return await prisma.user.update({
+  return await prisma.users.update({
     where: { id },
     data: updateData,
   })
