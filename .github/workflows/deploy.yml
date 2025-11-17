@@ -106,6 +106,9 @@ jobs:
               sudo npm i -g prisma
             fi
 
+            # Install dependencies
+            bun install --production
+
             # Generate Prisma client
             npx prisma generate
 
