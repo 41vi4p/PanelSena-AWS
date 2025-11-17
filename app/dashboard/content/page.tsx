@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useContent } from "@/hooks/use-content"
 import { useDisplays } from "@/hooks/use-displays"
 import { ContentItem } from "@/lib/types"
-import { sendPlaybackCommand } from "@/lib/realtime-db"
+import { sendPlaybackCommand } from "@/lib/dynamodb-realtime"
 
 export default function ContentPage() {
   const { user } = useAuth()

@@ -1,7 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
-import { getDatabase } from 'firebase/database'
 
 // Your Firebase configuration
 // Replace these with your actual Firebase project credentials
@@ -20,6 +19,5 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp()
 // Initialize Firebase services
 export const auth = getAuth(app)
 export const db = getFirestore(app)
-export const realtimeDb = getDatabase(app)
 
 export default app

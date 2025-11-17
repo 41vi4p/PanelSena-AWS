@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { LivePlaybackStatus, PlaybackCommand } from '@/lib/types'
 import {
-  listenToAllDisplaysStatus,
+  getAllDisplayStatuses,
   sendPlaybackCommand,
   cleanupOldCommands,
-} from '@/lib/realtime-db'
+} from '@/lib/dynamodb-realtime'
 
 export function useLivePlayback(userId: string | undefined) {
   const [displays, setDisplays] = useState<Record<string, LivePlaybackStatus>>({})
@@ -19,11 +19,33 @@ export function useLivePlayback(userId: string | undefined) {
 
     setLoading(true)
 
-    // Listen to all displays status
-    const unsubscribe = listenToAllDisplaysStatus(userId, (displaysData) => {
-      setDisplays(displaysData)
+  useEffect(() => {
+    if (!userId) {
       setLoading(false)
-    })
+      return
+    }
+
+    setLoading(true)
+
+    // Poll for display statuses every 5 seconds
+    const pollDisplays = async () => {
+      try {
+        const displaysData = await getAllDisplayStatuses(userId)
+        setDisplays(displaysData)
+        setLoading(false)
+        setError(null)
+      } catch (err) {
+        console.error('Error fetching display statuses:', err)
+        setError('Failed to fetch display statuses')
+        setLoading(false)
+      }
+    }
+
+    // Initial fetch
+    pollDisplays()
+
+    // Set up polling interval
+    const pollInterval = setInterval(pollDisplays, 5000) // Every 5 seconds
 
     // Cleanup old commands periodically
     const cleanupInterval = setInterval(() => {
@@ -37,9 +59,10 @@ export function useLivePlayback(userId: string | undefined) {
     }, 5 * 60 * 1000) // Every 5 minutes
 
     return () => {
-      unsubscribe()
+      clearInterval(pollInterval)
       clearInterval(cleanupInterval)
     }
+  }, [userId])
   }, [userId])
 
   const sendCommand = useCallback(
