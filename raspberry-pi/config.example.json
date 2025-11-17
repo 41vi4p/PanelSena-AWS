@@ -2,8 +2,6 @@
   "device_id": "",
   "device_key": "",
   "display_name": "Raspberry Pi Display - Main",
-  "database_url": "https://your-project-id.firebaseio.com",
-  "service_account_path": "serviceAccountKey.json",
   "aws_access_key_id": "your-aws-access-key-id",
   "aws_secret_access_key": "your-aws-secret-access-key",
   "aws_region": "us-east-1",

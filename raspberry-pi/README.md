@@ -69,50 +69,37 @@ cd PanelSena/raspberry-pi
 pip3 install -r requirements.txt
 ```
 
-## Firebase Configuration
+## AWS Configuration
 
-### 1. Get Firebase Service Account Key
+### 1. Set Up AWS Account and DynamoDB
 
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Select your project
-3. Go to **Project Settings** → **Service Accounts**
-4. Click **Generate New Private Key**
-5. Download the JSON file and save it as `serviceAccountKey.json` in the same directory
+1. Go to [AWS Console](https://console.aws.amazon.com/)
+2. Create an IAM user with DynamoDB permissions or use existing credentials
+3. Create a DynamoDB table named `panelsena-devices` with:
+   - **Primary Key**: `device_id` (String)
+   - **Sort Key**: `data_type` (String)
+   - Enable TTL with attribute name `ttl`
 
-### 2. Enable Firebase Realtime Database
+### 2. Get AWS Credentials
 
-1. In Firebase Console, go to **Build** → **Realtime Database**
-2. Click **Create Database**
-3. Choose your region
-4. Start in **Test Mode** (you can secure it later)
-5. Copy the database URL (e.g., `https://your-project.firebaseio.com`)
+You need:
+- **AWS Access Key ID**
+- **AWS Secret Access Key**
+- **AWS Region** (e.g., `us-east-1`)
+- **DynamoDB Table Name** (e.g., `panelsena-devices`)
 
-### 3. Configure Realtime Database Rules
-
-In the Firebase Console, go to **Realtime Database** → **Rules** and set:
-
-```json
-{
-  "rules": {
-    "users": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    }
-  }
-}
-```
-
-### 4. Update Environment Variables
+### 3. Update Web App Environment Variables
 
 Update your web app's `.env` file to include:
 
 ```env
-NEXT_PUBLIC_FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
+AWS_REGION=us-east-1
+DYNAMODB_TABLE_NAME=panelsena-devices
 ```
 
-### 5. Create Configuration File
+### 4. Create Configuration File
 
 Copy the example config and edit it:
 
@@ -125,12 +112,13 @@ Update the values:
 
 ```json
 {
-  "user_id": "your-firebase-user-id",
+  "user_id": "your-user-id",
   "display_id": "display-001",
   "display_name": "Main Lobby Display",
-  "database_url": "https://your-project.firebaseio.com",
-  "storage_bucket": "your-project.appspot.com",
-  "service_account_path": "serviceAccountKey.json"
+  "aws_access_key_id": "your-access-key-id",
+  "aws_secret_access_key": "your-secret-access-key",
+  "aws_region": "us-east-1",
+  "dynamodb_table_name": "panelsena-devices"
 }
 ```
 
@@ -138,8 +126,7 @@ Update the values:
 1. Log into your PanelSena dashboard
 2. Open browser Developer Tools (F12)
 3. Go to Console tab
-4. Type: `firebase.auth().currentUser.uid`
-5. Copy the displayed user ID
+4. Check localStorage or session storage for user ID
 
 **How to get your Display ID:**
 1. Go to the Displays page in PanelSena dashboard
@@ -276,7 +263,7 @@ echo "@unclutter -idle 0" | sudo tee -a /etc/xdg/lxsession/LXDE-pi/autostart
 ### Display Not Showing in Dashboard
 
 1. Check config.json has correct user_id and display_id
-2. Verify Firebase service account key is valid
+2. Verify AWS credentials are valid and have DynamoDB permissions
 3. Check network connectivity
 4. View logs: `sudo journalctl -u panelsena.service -f`
 
@@ -289,16 +276,16 @@ echo "@unclutter -idle 0" | sudo tee -a /etc/xdg/lxsession/LXDE-pi/autostart
 
 ### Connection Issues
 
-1. Check database URL in config.json
-2. Verify Firebase Realtime Database is enabled
-3. Check database rules allow access
+1. Check AWS region and table name in config.json
+2. Verify DynamoDB table exists and has correct key schema
+3. Check AWS credentials have proper permissions
 4. Test internet connectivity: `ping google.com`
 
 ### Permission Denied Errors
 
 ```bash
 chmod +x player.py
-chmod 600 serviceAccountKey.json
+chmod 600 config.json  # Keep config secure
 ```
 
 ## File Structure
@@ -307,7 +294,7 @@ chmod 600 serviceAccountKey.json
 ~/panelsena/
 ├── player.py                   # Main player script
 ├── config.json                 # Configuration file
-├── serviceAccountKey.json      # Firebase credentials
+├── dynamodb_client.py          # AWS DynamoDB client
 ├── requirements.txt            # Python dependencies
 ├── content/                    # Downloaded content storage
 └── cache/                      # Temporary cache files
@@ -347,11 +334,12 @@ hdmi_enable_4kp60=1
 
 ## Security Best Practices
 
-1. **Keep serviceAccountKey.json secure** - Never commit to Git
+1. **Keep AWS credentials secure** - Use IAM roles when possible, rotate keys regularly
 2. **Use strong WiFi password** - Secure your network
 3. **Update regularly** - Keep OS and packages updated
 4. **Restrict physical access** - Secure the Raspberry Pi device
 5. **Monitor logs** - Check for unauthorized access
+6. **Use least privilege IAM policies** - Only grant necessary DynamoDB permissions
 
 ## Advanced Configuration
 
@@ -385,8 +373,9 @@ sudo systemctl start ssh
 For issues or questions:
 - Check the logs: `sudo journalctl -u panelsena.service -f`
 - Verify configuration in `config.json`
-- Test Firebase connectivity
-- Review Firebase Console for errors
+- Test AWS connectivity and DynamoDB permissions
+- Review AWS CloudWatch logs for DynamoDB errors
+- Check AWS IAM permissions for the credentials being used
 
 ## License
 

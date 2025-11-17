@@ -12,7 +12,7 @@ python3 setup_device.py
 The wizard will guide you through:
 - ✅ Generating unique Device ID and Key
 - ✅ Configuring display name
-- ✅ Setting up Firebase credentials
+- ✅ Setting up AWS credentials
 - ✅ Creating config.json automatically
 
 **You'll get output like:**
@@ -27,9 +27,8 @@ Credentials saved to: device_credentials_20251031_143055.txt
 ### Step 2: Copy to Raspberry Pi (1 min)
 
 ```bash
-# Copy config and service account key to your Pi
+# Copy config to your Pi
 scp config.json pi@<raspberry-pi-ip>:~/panelsena/
-scp serviceAccountKey.json pi@<raspberry-pi-ip>:~/panelsena/
 ```
 
 ### Step 3: Start Player (1 min)

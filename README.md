@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg)](https://www.typescriptlang.org/)
-[![Firebase](https://img.shields.io/badge/Firebase-10-orange.svg)](https://firebase.google.com/)
+[![AWS](https://img.shields.io/badge/AWS-DynamoDB-orange.svg)](https://aws.amazon.com/dynamodb/)
 
 **A powerful, modern digital signage platform for managing multiple displays using Raspberry Pi devices.**
 
@@ -129,16 +129,15 @@ PanelSena is a comprehensive cloud-based digital signage management system that 
 - **[Lucide React](https://lucide.dev/)** - Icon library
 
 ### Backend & Infrastructure
-- **[Firebase Authentication](https://firebase.google.com/products/auth)** - User authentication
-- **[Cloud Firestore](https://firebase.google.com/products/firestore)** - NoSQL database
-- **[Firebase Realtime Database](https://firebase.google.com/products/realtime-database)** - Real-time sync
-- **[Firebase Storage](https://firebase.google.com/products/storage)** - File storage
-- **[Firebase Hosting](https://firebase.google.com/products/hosting)** - Web hosting
+- **[AWS DynamoDB](https://aws.amazon.com/dynamodb/)** - NoSQL database for device management
+- **[AWS S3](https://aws.amazon.com/s3/)** - File storage with CDN
+- **[AWS IAM](https://aws.amazon.com/iam/)** - Identity and access management
+- **[AWS SDK](https://aws.amazon.com/sdk-for-javascript/)** - AWS service integration
 
 ### Raspberry Pi Player
 - **[Python 3](https://www.python.org/)** - Player runtime
 - **[VLC](https://www.videolan.org/)** - Media playback
-- **[Firebase Admin SDK](https://firebase.google.com/docs/admin/setup)** - Backend integration
+- **[AWS SDK for Python (boto3)](https://aws.amazon.com/sdk-for-python/)** - AWS DynamoDB integration
 - **[python-vlc](https://pypi.org/project/python-vlc/)** - VLC Python bindings
 
 ### Development Tools
@@ -153,7 +152,7 @@ PanelSena is a comprehensive cloud-based digital signage management system that 
 ### Prerequisites
 
 - **Node.js** 18+ and npm/pnpm
-- **Firebase** account ([Sign up](https://firebase.google.com/))
+- **AWS Account** ([Sign up](https://aws.amazon.com/))
 - **Raspberry Pi** 3 or higher (for display player)
 
 ### Installation
@@ -171,27 +170,22 @@ PanelSena is a comprehensive cloud-based digital signage management system that 
    pnpm install
    ```
 
-3. **Set up Firebase**
+3. **Set up AWS Services**
    
-   Create a Firebase project at [firebase.google.com](https://firebase.google.com/)
-   
-   Enable these services:
-   - Authentication (Email/Password & Google)
-   - Cloud Firestore
-   - Realtime Database
-   - Storage
+   Create AWS resources:
+   - DynamoDB table named `panelsena-devices`
+   - S3 bucket for file storage
+   - IAM user with appropriate permissions
 
 4. **Configure environment variables**
    
    Create `.env.local` in the root directory:
    ```env
-   NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
-   NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_storage_bucket
-   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-   NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-   NEXT_PUBLIC_FIREBASE_DATABASE_URL=your_database_url
+   AWS_ACCESS_KEY_ID=your_access_key_id
+   AWS_SECRET_ACCESS_KEY=your_secret_access_key
+   AWS_REGION=us-east-1
+   DYNAMODB_TABLE_NAME=panelsena-devices
+   S3_BUCKET_NAME=your-bucket-name
    ```
 
 5. **Run development server**
@@ -270,37 +264,35 @@ PanelSena/
 │   ├── use-schedules.ts    # Schedule management hook
 │   └── use-analytics.ts    # Analytics hook
 ├── lib/                     # Utility libraries
-│   ├── firebase.ts         # Firebase initialization
+│   ├── dynamodb.ts         # AWS DynamoDB client
+│   ├── dynamodb-realtime.ts # DynamoDB operations
 │   ├── auth.ts             # Authentication functions
-│   ├── firestore.ts        # Firestore operations
-│   ├── storage.ts          # Storage operations
+│   ├── storage.ts          # AWS S3 operations
 │   ├── types.ts            # TypeScript types
 │   └── utils.ts            # Helper functions
-├── firestore.rules          # Firestore security rules
-├── storage.rules            # Storage security rules
-├── FIREBASE_SETUP.md        # Firebase setup guide
+├── raspberry-pi/            # Raspberry Pi player code
+│   ├── player.py           # Main player script
+│   ├── dynamodb_client.py  # AWS DynamoDB client
+│   ├── setup_device.py     # Device setup wizard
+│   └── ...
+├── prisma/                  # Database schema (if used)
+├── docs/                    # Documentation
 └── README.md               # This file
 ```
 
-## Firebase Collections
+## DynamoDB Tables
 
-### users
-User profiles and account information
+### panelsena-devices
+Device management and real-time status tracking
+- **Primary Key**: `device_id` (String)
+- **Sort Key**: `data_type` (String)
+- **TTL**: `ttl` attribute for automatic cleanup
 
-### displays
-Digital display configurations and status
-
-### content
-Uploaded content metadata (images, videos, documents)
-
-### schedules
-Content scheduling information
-
-### activities
-User activity logs and system events
-
-### analytics
-Performance metrics and usage data
+**Data Types:**
+- `device_info`: Device registration and configuration
+- `status`: Real-time device status and heartbeat
+- `command`: Remote control commands
+- `response`: Command execution responses
 
 ## Available Scripts
 
@@ -318,31 +310,58 @@ npm run lint         # Run ESLint
 
 ## Security
 
-- All data is isolated per user using Firebase security rules
-- Users can only access their own resources
+- All data is isolated per user using AWS IAM policies
+- Users can only access their own resources through proper authentication
 - File uploads are validated for type and size (max 100MB)
 - Authentication required for all operations
 - HTTPS enforced in production
+- AWS credentials are encrypted and securely managed
 
-## Firebase Security Rules
+## AWS IAM Configuration
 
-Security rules are provided in:
-- `firestore.rules` - Database security
-- `storage.rules` - File storage security
+Create an IAM policy for PanelSena with the following permissions:
 
-Deploy them using:
-```bash
-firebase deploy --only firestore:rules
-firebase deploy --only storage:rules
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": "arn:aws:dynamodb:region:account:table/panelsena-devices"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::your-bucket-name",
+        "arn:aws:s3:::your-bucket-name/*"
+      ]
+    }
+  ]
+}
 ```
+
+Apply least privilege principles and rotate access keys regularly.
 
 ## Key Features Implementation
 
 ### Real-time Updates
-All display data, content, and activities update in real-time using Firestore listeners.
+Display data, content, and activities update using DynamoDB polling with 2-5 second intervals for near real-time synchronization.
 
 ### File Upload
-Files are uploaded to Firebase Storage with progress tracking. Metadata is stored in Firestore.
+Files are uploaded to AWS S3 with progress tracking. Metadata is stored in DynamoDB.
 
 ### Authentication
 Firebase Authentication with Email/Password and Google Sign-In. Protected routes ensure only authenticated users can access the dashboard.
@@ -488,7 +507,7 @@ copies or substantial portions of the Software.
 - Built with [Next.js](https://nextjs.org/)
 - UI Components from [shadcn/ui](https://ui.shadcn.com/)
 - Icons from [Lucide](https://lucide.dev/)
-- Backend powered by [Firebase](https://firebase.google.com/)
+- Backend powered by [AWS](https://aws.amazon.com/)
 - Media playback via [VLC](https://www.videolan.org/)
 
 ---
@@ -518,7 +537,7 @@ Comprehensive documentation is available in the `docs/` folder:
 
 ### Getting Started
 - **[Quick Start Guide](raspberry-pi/QUICK_START.md)** - 5-minute Raspberry Pi setup
-- **[Firebase Setup](FIREBASE_SETUP.md)** - Firebase configuration guide
+- **[AWS Setup Guide](AWS_SETUP.md)** - AWS configuration guide
 
 ### Features & Implementation
 - **[Live Control System](docs/LIVE_CONTROL_SETUP.md)** - Real-time playback control guide
@@ -534,7 +553,7 @@ Comprehensive documentation is available in the `docs/` folder:
 
 ## Troubleshooting
 
-See [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) for common issues and solutions.
+See [AWS_SETUP.md](./AWS_SETUP.md) for common issues and solutions.
 
 For specific issues:
 - **Live Control**: [docs/LIVE_CONTROL_SETUP.md#troubleshooting](docs/LIVE_CONTROL_SETUP.md#troubleshooting)
@@ -563,4 +582,4 @@ For issues or questions, please open an issue on GitHub.
 - Built with [Next.js](https://nextjs.org/)
 - UI components from [Radix UI](https://www.radix-ui.com/)
 - Icons from [Lucide](https://lucide.dev/)
-- Backend by [Firebase](https://firebase.google.com/)
+- Backend by [AWS](https://aws.amazon.com/)

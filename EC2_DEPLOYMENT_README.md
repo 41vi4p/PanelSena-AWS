@@ -10,14 +10,11 @@ Before deploying, you need to set up the following secrets in your GitHub reposi
 - `EC2_SSH_KEY`: Private SSH key for connecting to EC2 (generate with `ssh-keygen`)
 - `EC2_PORT`: SSH port (optional, defaults to 22)
 
-### Firebase Configuration Secrets
-- `NEXT_PUBLIC_FIREBASE_API_KEY`: Firebase API key
-- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`: Firebase auth domain
-- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`: Firebase project ID
-- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`: Firebase storage bucket
-- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`: Firebase messaging sender ID
-- `NEXT_PUBLIC_FIREBASE_APP_ID`: Firebase app ID
-- `FIREBASE_SERVICE_ACCOUNT_KEY`: Firebase service account key (JSON string)
+### AWS Configuration Secrets
+- `AWS_ACCESS_KEY_ID`: AWS access key ID
+- `AWS_SECRET_ACCESS_KEY`: AWS secret access key
+- `AWS_REGION`: AWS region (e.g., `us-east-1`)
+- `DYNAMODB_TABLE_NAME`: DynamoDB table name (e.g., `panelsena-devices`)
 
 ## Setting up Secrets
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PanelSena Raspberry Pi Player
-A digital signage player that connects to Firebase and plays scheduled content
+A digital signage player that connects to AWS DynamoDB and plays scheduled content
 """
 
 import os
@@ -13,10 +13,9 @@ import threading
 import requests
 from datetime import datetime
 from pathlib import Path
-import firebase_admin
-from firebase_admin import credentials, db, firestore
 import boto3
 import vlc
+from dynamodb_client import DynamoDBClient
 
 # Configuration
 CONFIG_FILE = "config.json"
@@ -37,8 +36,8 @@ class PanelSenaPlayer:
         # State
         self.running = True
 
-        # Initialize Firebase
-        self.init_firebase()
+        # Initialize DynamoDB
+        self.init_dynamodb()
 
         # Authenticate and get device link
         self.authenticate_device()
@@ -101,18 +100,15 @@ class PanelSenaPlayer:
         with open(CONFIG_FILE, 'r') as f:
             return json.load(f)
 
-    def init_firebase(self):
-        """Initialize Firebase Admin SDK and AWS S3"""
+    def init_dynamodb(self):
+        """Initialize DynamoDB client and AWS S3"""
         try:
-            # Initialize Firebase (keeping for database and auth)
-            cred = credentials.Certificate(self.config.get("service_account_path"))
-            firebase_admin.initialize_app(cred, {
-                'databaseURL': self.config.get("database_url")
-            })
-
-            # Get database reference
-            self.db = db
-            self.firestore_db = firestore.client()
+            # Initialize DynamoDB client
+            self.dynamodb_client = DynamoDBClient(
+                region_name=self.config.get("aws_region", "us-east-1"),
+                aws_access_key_id=self.config.get("aws_access_key_id"),
+                aws_secret_access_key=self.config.get("aws_secret_access_key")
+            )
 
             # Initialize AWS S3 client
             self.s3_client = boto3.client(
@@ -123,7 +119,7 @@ class PanelSenaPlayer:
             )
             self.s3_bucket_name = self.config.get("aws_s3_bucket_name")
 
-            print("[INFO] Firebase and AWS S3 initialized successfully")
+            print("[INFO] DynamoDB and AWS S3 initialized successfully")
         except Exception as e:
             print(f"[ERROR] Failed to initialize services: {e}")
             sys.exit(1)
@@ -134,36 +130,17 @@ class PanelSenaPlayer:
             print(f"[INFO] Authenticating device: {self.device_id}")
 
             # First, register device in registry (or update last seen)
-            device_ref = self.db.reference(f'device_registry/{self.device_id}')
-            device_data = device_ref.get()
+            if not self.dynamodb_client.verify_device_credentials(self.device_id, self.device_key):
+                print("[ERROR] Invalid device key!")
+                print("The device key in config.json does not match the registered device.")
+                sys.exit(1)
 
-            if device_data:
-                # Verify device key
-                if device_data.get('deviceKey') != self.device_key:
-                    print("[ERROR] Invalid device key!")
-                    print("The device key in config.json does not match the registered device.")
-                    sys.exit(1)
-
-                # Update last seen
-                device_ref.update({'lastSeen': int(time.time() * 1000)})
-                print("[INFO] Device authenticated successfully")
-            else:
-                # Register new device
-                print("[INFO] Registering new device...")
-                device_ref.set({
-                    'deviceId': self.device_id,
-                    'deviceKey': self.device_key,
-                    'displayName': self.display_name,
-                    'registeredAt': int(time.time() * 1000),
-                    'lastSeen': int(time.time() * 1000),
-                    'linkedToUser': None,
-                    'status': 'registered'
-                })
-                print("[INFO] Device registered. Please link it in the dashboard.")
+            # Update last seen
+            self.dynamodb_client.update_device_last_seen(self.device_id)
+            print("[INFO] Device authenticated successfully")
 
             # Check if device is linked to a user
-            link_ref = self.db.reference(f'device_links/{self.device_id}')
-            link_data = link_ref.get()
+            link_data = self.dynamodb_client.get_device_link(self.device_id)
 
             if link_data:
                 self.user_id = link_data.get('userId')
@@ -186,11 +163,9 @@ class PanelSenaPlayer:
 
     def wait_for_device_link(self):
         """Wait for device to be linked to a user"""
-        link_ref = self.db.reference(f'device_links/{self.device_id}')
-
         print("[INFO] Polling for device link every 5 seconds...")
         while self.running:
-            link_data = link_ref.get()
+            link_data = self.dynamodb_client.get_device_link(self.device_id)
             if link_data:
                 self.user_id = link_data.get('userId')
                 self.display_id = link_data.get('displayId')
@@ -199,26 +174,23 @@ class PanelSenaPlayer:
             time.sleep(5)
 
     def update_status(self, status="online", error_message=None):
-        """Update display status in Firebase Realtime Database"""
+        """Update display status in DynamoDB"""
         try:
             print(f"[DEBUG] update_status called with status={status}")
-            
+
             if not self.user_id or not self.display_id:
                 print("[WARN] Cannot update status - user_id or display_id not set")
                 return
-
-            status_ref = self.db.reference(f'users/{self.user_id}/displays/{self.display_id}/status')
 
             status_data = {
                 'displayId': self.display_id,
                 'displayName': self.display_name,
                 'status': status,
-                'lastHeartbeat': int(time.time() * 1000),
                 'volume': self.volume,
                 'brightness': self.brightness,
             }
 
-            print(f"[DEBUG] Preparing status update: status={status}, lastHeartbeat={status_data['lastHeartbeat']}")
+            print(f"[DEBUG] Preparing status update: status={status}")
 
             # Add current content if playing
             if self.current_content:
@@ -247,9 +219,13 @@ class PanelSenaPlayer:
             if error_message:
                 status_data['errorMessage'] = error_message
 
-            print(f"[DEBUG] Setting Firebase status data...")
-            status_ref.set(status_data)
-            print(f"[DEBUG] Firebase status updated successfully with status={status}")
+            print(f"[DEBUG] Setting DynamoDB status data...")
+            success = self.dynamodb_client.update_display_status(self.user_id, self.display_id, status_data)
+
+            if success:
+                print(f"[DEBUG] DynamoDB status updated successfully with status={status}")
+            else:
+                print(f"[ERROR] Failed to update status in DynamoDB")
 
         except Exception as e:
             print(f"[ERROR] Failed to update status: {e}")
@@ -282,36 +258,40 @@ class PanelSenaPlayer:
         print("[INFO] Heartbeat loop ended")
 
     def listen_for_commands(self):
-        """Listen for commands from Firebase"""
-        commands_ref = self.db.reference(f'users/{self.user_id}/displays/{self.display_id}/commands')
+        """Poll for commands from DynamoDB"""
+        print("[INFO] Starting command polling...")
 
-        def command_listener(event):
-            """Handle incoming commands"""
-            if event.data is None:
-                return
+        def poll_commands():
+            """Poll for pending commands"""
+            while self.running:
+                try:
+                    if not self.user_id or not self.display_id:
+                        time.sleep(5)
+                        continue
 
-            # Handle both single command and multiple commands
-            if isinstance(event.data, dict):
-                # Check if it's a single command (has 'status' key) or multiple commands
-                if 'status' in event.data:
-                    # Single command object
-                    if event.data.get('status') == 'pending':
-                        command_id = event.data.get('commandId', 'unknown')
-                        print(f"[INFO] Received command: {event.data.get('type')}")
-                        self.execute_command(command_id, event.data)
-                else:
-                    # Multiple commands
-                    for command_id, command in event.data.items():
-                        if isinstance(command, dict) and command.get('status') == 'pending':
+                    # Get pending commands
+                    commands = self.dynamodb_client.get_pending_commands(self.user_id, self.display_id)
+
+                    # Process pending commands
+                    for command_id, command in commands.items():
+                        if command.get('status') == 'pending':
                             print(f"[INFO] Received command: {command.get('type')}")
                             self.execute_command(command_id, command)
 
-        commands_ref.listen(command_listener)
-        print("[INFO] Listening for commands...")
+                    # Poll every 2 seconds
+                    time.sleep(2)
+
+                except Exception as e:
+                    print(f"[ERROR] Command polling failed: {e}")
+                    time.sleep(5)  # Wait longer on error
+
+        # Start polling in a separate thread
+        command_thread = threading.Thread(target=poll_commands, daemon=True)
+        command_thread.start()
+        print("[INFO] Command polling started")
 
     def execute_command(self, command_id, command):
         """Execute a playback command"""
-        command_ref = None
         try:
             command_type = command.get('type')
             payload = command.get('payload', {})
@@ -343,73 +323,56 @@ class PanelSenaPlayer:
                 self.restart_device()
 
             # Mark command as executed
-            command_ref = self.db.reference(
-                f'users/{self.user_id}/displays/{self.display_id}/commands/{command_id}'
-            )
-            command_ref.update({
-                'status': 'executed',
-                'result': 'Command executed successfully'
-            })
+            if self.user_id and self.display_id:
+                success = self.dynamodb_client.update_command_status(
+                    self.user_id, self.display_id, command_id, 'executed'
+                )
+                if not success:
+                    print(f"[ERROR] Failed to mark command {command_id} as executed")
+            else:
+                print(f"[ERROR] Cannot update command status - missing user_id or display_id")
+
             print(f"[INFO] Command {command_type} executed successfully")
 
         except Exception as e:
             print(f"[ERROR] Failed to execute command: {e}")
             import traceback
             traceback.print_exc()
-            
+
             # Mark command as failed
             try:
-                if command_ref is None:
-                    command_ref = self.db.reference(
-                        f'users/{self.user_id}/displays/{self.display_id}/commands/{command_id}'
+                if self.user_id and self.display_id:
+                    self.dynamodb_client.update_command_status(
+                        self.user_id, self.display_id, command_id, 'failed', str(e)
                     )
-                command_ref.update({
-                    'status': 'failed',
-                    'result': str(e)
-                })
             except Exception as update_error:
                 print(f"[ERROR] Failed to update command status: {update_error}")
 
     def load_and_play_schedule(self, schedule_id):
-        """Load schedule from Firestore and start playback"""
+        """Load schedule from API and start playback"""
         try:
             print(f"[INFO] Loading schedule: {schedule_id}")
 
-            # Fetch schedule from Firestore
-            schedule_ref = self.firestore_db.collection('schedules').document(schedule_id)
-            schedule_doc = schedule_ref.get()
-            
-            if not schedule_doc.exists:
-                print(f"[ERROR] Schedule not found in Firestore: {schedule_id}")
-                self.update_status("error", f"Schedule not found: {schedule_id}")
-                return
-            
-            schedule_data = schedule_doc.to_dict()
-            print(f"[INFO] Found schedule: {schedule_data.get('name')}")
-            print(f"[DEBUG] Schedule data: {schedule_data}")
-            
-            # Get content IDs from schedule (the field is 'contentIds')
-            content_ids = schedule_data.get('contentIds', [])
-            if not content_ids or len(content_ids) == 0:
-                print(f"[WARN] Schedule has no content items")
-                print(f"[DEBUG] Available schedule fields: {list(schedule_data.keys())}")
-                self.update_status("error", "Schedule has no content")
-                return
-            
-            # Set the content queue
-            self.content_queue = content_ids
-            print(f"[INFO] Loaded {len(self.content_queue)} content items: {self.content_queue}")
+            # For now, we'll need to get the schedule data from the API
+            # Since the Raspberry Pi doesn't have direct database access,
+            # we'll use a simplified approach or fetch from API
 
-            # Set current schedule info
-            self.current_schedule = {
-                'id': schedule_id,
-                'name': schedule_data.get('name', f"Schedule {schedule_id}"),
-            }
+            # TODO: Implement API call to fetch schedule data
+            # For now, we'll assume the schedule data is passed in the command payload
+            print(f"[WARN] Schedule loading not fully implemented - needs API integration")
 
-            # Start playing the first content
-            self.current_index = 0
-            print(f"[INFO] Starting playback from index {self.current_index}")
-            self.play_from_queue()
+            # Placeholder - in a real implementation, you'd make an API call like:
+            # response = requests.get(f"{API_BASE_URL}/api/schedules/{schedule_id}")
+            # if response.status_code == 200:
+            #     schedule_data = response.json()
+            #     # Process schedule data...
+
+            self.update_status("error", f"Schedule loading not implemented: {schedule_id}")
+            return
+
+        except Exception as e:
+            print(f"[ERROR] Failed to load schedule: {e}")
+            self.update_status("error", f"Failed to load schedule: {str(e)}")
 
         except Exception as e:
             print(f"[ERROR] Failed to load schedule: {e}")
@@ -421,57 +384,20 @@ class PanelSenaPlayer:
         """Play a single content item"""
         try:
             print(f"[INFO] Playing content: {content_id}")
-            
-            # Fetch content metadata from Firestore (content is stored at root level)
-            content_ref = self.firestore_db.collection('content').document(content_id)
-            content_doc = content_ref.get()
-            
-            if not content_doc.exists:
-                print(f"[ERROR] Content not found in Firestore: {content_id}")
-                print(f"[DEBUG] Checked path: content/{content_id}")
-                self.update_status("error", f"Content not found: {content_id}")
-                return
-            
-            content_data = content_doc.to_dict()
-            print(f"[INFO] Found content: {content_data.get('name')} ({content_data.get('type')})")
-            
-            # Get storage path
-            storage_path = content_data.get('url', '')
-            if not storage_path:
-                print(f"[ERROR] No storage URL for content: {content_id}")
-                self.update_status("error", "Content has no storage URL")
-                return
-            
-            print(f"[DEBUG] Storage URL: {storage_path}")
-            
-            # Determine file extension from content type or URL
-            content_type = content_data.get('type', 'video')
-            file_extension = self._get_file_extension(storage_path, content_type)
-            
-            # Create local file path
-            local_filename = f"{content_id}{file_extension}"
-            local_path = os.path.join(CONTENT_DIR, local_filename)
-            
-            # Download if not already cached
-            if not os.path.exists(local_path):
-                print(f"[INFO] Downloading content from: {storage_path}")
-                if not self.download_content(storage_path, local_path):
-                    self.update_status("error", "Failed to download content")
-                    return
-            else:
-                print(f"[INFO] Using cached content: {local_path}")
-            
-            # Prepare content info
-            content_info = {
-                'id': content_id,
-                'name': content_data.get('name', 'Unknown'),
-                'type': content_type,
-                'url': storage_path,
-            }
-            
-            # Play the file
-            self.play_file(local_path, content_info)
-            
+
+            # TODO: Implement API call to fetch content metadata
+            # For now, we'll use a simplified approach
+            print(f"[WARN] Content loading not fully implemented - needs API integration")
+
+            # Placeholder - in a real implementation, you'd make an API call like:
+            # response = requests.get(f"{API_BASE_URL}/api/content/{content_id}")
+            # if response.status_code == 200:
+            #     content_data = response.json()
+            #     # Process content data...
+
+            self.update_status("error", f"Content loading not implemented: {content_id}")
+            return
+
         except Exception as e:
             print(f"[ERROR] Failed to play content: {e}")
             import traceback

@@ -46,9 +46,9 @@ def main():
     
     print("This wizard will help you set up your Raspberry Pi as a digital signage display.")
     print("You'll need:")
-    print("  • Firebase project credentials (serviceAccountKey.json)")
-    print("  • Your Firebase Realtime Database URL")
-    print("  • Your Firebase Storage bucket name")
+    print("  • AWS access keys with DynamoDB and S3 permissions")
+    print("  • Your AWS region")
+    print("  • Your S3 bucket name")
     print()
     input("Press Enter to continue...")
     
@@ -73,39 +73,18 @@ def main():
     
     display_name = get_user_input("Enter a name for this display", "Raspberry Pi Display")
     
-    # Step 3: Get Firebase Configuration
-    print_step(3, "Firebase Configuration")
+    # Step 3: Get AWS Configuration
+    print_step(3, "AWS Configuration")
     
     print()
-    print("You need your Firebase project details:")
+    print("You need your AWS credentials:")
     print()
     
-    # Check if serviceAccountKey.json exists
-    service_account_path = "serviceAccountKey.json"
-    if not os.path.exists(service_account_path):
-        print(f"❌ {service_account_path} not found!")
-        print()
-        print("Please download your Firebase service account key:")
-        print("  1. Go to Firebase Console: https://console.firebase.google.com/")
-        print("  2. Select your project")
-        print("  3. Go to Project Settings → Service Accounts")
-        print("  4. Click 'Generate New Private Key'")
-        print("  5. Save the file as 'serviceAccountKey.json' in this directory")
-        print()
-        input("Press Enter after you've added the file...")
-        
-        if not os.path.exists(service_account_path):
-            print("❌ File still not found. Exiting.")
-            return
-    
-    print(f"✅ Found {service_account_path}")
-    print()
-    
-    # Get Firebase URLs
-    print("Enter your Firebase configuration:")
-    print()
-    database_url = get_user_input("Realtime Database URL", "https://your-project.firebaseio.com")
-    storage_bucket = get_user_input("Storage Bucket", "your-project.appspot.com")
+    # Get AWS credentials
+    aws_access_key_id = get_user_input("AWS Access Key ID")
+    aws_secret_access_key = get_user_input("AWS Secret Access Key")
+    aws_region = get_user_input("AWS Region", "us-east-1")
+    aws_s3_bucket_name = get_user_input("S3 Bucket Name")
     
     # Step 4: Create Configuration File
     print_step(4, "Creating Configuration File")
@@ -114,9 +93,10 @@ def main():
         "device_id": device_id,
         "device_key": device_key,
         "display_name": display_name,
-        "database_url": database_url,
-        "storage_bucket": storage_bucket,
-        "service_account_path": service_account_path
+        "aws_access_key_id": aws_access_key_id,
+        "aws_secret_access_key": aws_secret_access_key,
+        "aws_region": aws_region,
+        "aws_s3_bucket_name": aws_s3_bucket_name
     }
     
     # Write config.json
