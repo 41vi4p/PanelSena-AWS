@@ -107,7 +107,7 @@ jobs:
             fi
 
             # Install dependencies
-            bun install --production --no-frozen-lockfile
+            bun install --production
 
 
             # Generate Prisma client
