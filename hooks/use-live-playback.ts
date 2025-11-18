@@ -1,10 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { LivePlaybackStatus, PlaybackCommand } from '@/lib/types'
-import {
-  getAllDisplayStatuses,
-  sendPlaybackCommand,
-  cleanupOldCommands,
-} from '@/lib/dynamodb-realtime'
 
 export function useLivePlayback(userId: string | undefined) {
   const [displays, setDisplays] = useState<Record<string, LivePlaybackStatus>>({})
@@ -22,21 +17,23 @@ export function useLivePlayback(userId: string | undefined) {
     // Poll for display statuses every 5 seconds
     const pollDisplays = async () => {
       try {
-        const displaysData = await getAllDisplayStatuses(userId)
-        setDisplays(displaysData)
+        const response = await fetch(`/api/live-playback?userId=${encodeURIComponent(userId)}`)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        setDisplays(data.displays || {})
         setLoading(false)
         setError(null)
       } catch (err: any) {
         console.error('Error fetching display statuses:', err)
-        // Don't show error for AWS credential issues in development
-        if (err.name === 'UnrecognizedClientException' || err.message?.includes('security token')) {
-          console.warn('AWS DynamoDB not configured - Live playback disabled')
-          setDisplays({})
-          setLoading(false)
-          setError(null)
-        } else {
+        setDisplays({})
+        setLoading(false)
+        // Only set error for non-auth issues
+        if (!err.message?.includes('401') && !err.message?.includes('403')) {
           setError('Failed to fetch display statuses')
-          setLoading(false)
         }
       }
     }
@@ -47,20 +44,8 @@ export function useLivePlayback(userId: string | undefined) {
     // Set up polling interval
     const pollInterval = setInterval(pollDisplays, 5000) // Every 5 seconds
 
-    // Cleanup old commands periodically
-    const cleanupInterval = setInterval(() => {
-      Object.keys(displays).forEach(async (displayId) => {
-        try {
-          await cleanupOldCommands(userId, displayId)
-        } catch (err) {
-          console.error('Error cleaning up commands:', err)
-        }
-      })
-    }, 5 * 60 * 1000) // Every 5 minutes
-
     return () => {
       clearInterval(pollInterval)
-      clearInterval(cleanupInterval)
     }
   }, [userId])
 
@@ -74,11 +59,27 @@ export function useLivePlayback(userId: string | undefined) {
       }
 
       try {
-        const commandId = await sendPlaybackCommand(userId, displayId, {
-          displayId,
-          ...command,
+        const response = await fetch('/api/live-playback/command', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId,
+            displayId,
+            command: {
+              displayId,
+              ...command,
+            },
+          }),
         })
-        return commandId
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const data = await response.json()
+        return data.commandId
       } catch (err) {
         console.error('Error sending command:', err)
         setError('Failed to send command')
