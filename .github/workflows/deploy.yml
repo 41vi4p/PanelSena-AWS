@@ -114,14 +114,20 @@ jobs:
             # Generate Prisma client
             npx prisma generate
 
-            # Ensure database directory exists and has proper permissions
-            mkdir -p /home/ubuntu/panel-sena/prisma
-            touch /home/ubuntu/panel-sena/dev.db
-            chmod 664 /home/ubuntu/panel-sena/dev.db
+            # Update DATABASE_URL in .env to use local Docker PostgreSQL
+            if [ -f /home/ubuntu/panel-sena/.env ]; then
+              sed -i 's|DATABASE_URL=.*|DATABASE_URL="postgresql://postgres:postgres@localhost:5432/panelsena_db?schema=public"|' /home/ubuntu/panel-sena/.env
+            fi
 
-            # Push database schema (creates database if it doesn't exist)
-            # Skip if database is unreachable (will need manual intervention)
-            npx prisma db push --accept-data-loss || echo "⚠️ Database push failed - check DATABASE_URL and network connectivity"
+            # Set up Docker PostgreSQL database
+            # Set password for Docker PostgreSQL container
+            docker exec ubuntu-db-1 psql -U postgres -c "ALTER USER postgres WITH PASSWORD 'postgres';" || echo "⚠️ Failed to set PostgreSQL password - container may not be running"
+
+            # Create the database if it doesn't exist
+            docker exec -e PGPASSWORD=postgres ubuntu-db-1 psql -U postgres -c "CREATE DATABASE panelsena_db;" || echo "⚠️ Database may already exist or Docker container is not running"
+
+            # Push database schema
+            npx prisma db push --accept-data-loss || echo "⚠️ Database push failed - check DATABASE_URL and Docker container status"
 
             # Start/restart the app with PM2 using the Node interpreter and the npm "start" script.
             # We use `pm2 start npm -- run start` which invokes the npm script under Node.
