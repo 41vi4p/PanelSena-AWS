@@ -143,35 +143,38 @@ class DynamoDBClient:
             item_exists = 'Item' in response
 
             if item_exists:
-                # Update existing item
-                update_expression = 'SET #status = :status, lastHeartbeat = :lastHeartbeat'
-                expression_names = {'#status': 'status'}
+                # Update existing item - store all fields at root level
+                update_expression_parts = ['lastHeartbeat = :lastHeartbeat']
+                expression_names = {}
                 expression_values = {
-                    ':status': status_data,
                     ':lastHeartbeat': int(time.time() * 1000)
                 }
 
-                # Add optional fields
-                if 'currentContent' in status_data:
-                    update_expression += ', currentContent = :currentContent'
-                    expression_values[':currentContent'] = status_data['currentContent']
+                # Add all status data fields to update expression
+                for field_name, field_value in status_data.items():
+                    # Use attribute names for reserved words
+                    if field_name == 'status':
+                        update_expression_parts.append('#status = :status')
+                        expression_names['#status'] = 'status'
+                        expression_values[':status'] = field_value
+                    else:
+                        update_expression_parts.append(f'{field_name} = :{field_name}')
+                        expression_values[f':{field_name}'] = field_value
 
-                if 'schedule' in status_data:
-                    update_expression += ', schedule = :schedule'
-                    expression_values[':schedule'] = status_data['schedule']
+                update_expression = 'SET ' + ', '.join(update_expression_parts)
 
-                if 'errorMessage' in status_data:
-                    update_expression += ', errorMessage = :errorMessage'
-                    expression_values[':errorMessage'] = status_data['errorMessage']
+                update_params = {
+                    'Key': key,
+                    'UpdateExpression': update_expression,
+                    'ExpressionAttributeValues': expression_values
+                }
+                
+                if expression_names:
+                    update_params['ExpressionAttributeNames'] = expression_names
 
-                self.display_status.update_item(
-                    Key=key,
-                    UpdateExpression=update_expression,
-                    ExpressionAttributeNames=expression_names,
-                    ExpressionAttributeValues=expression_values
-                )
+                self.display_status.update_item(**update_params)
             else:
-                # Create new item
+                # Create new item - all fields at root level
                 item = {
                     **key,
                     **status_data,
@@ -183,6 +186,9 @@ class DynamoDBClient:
             return True
         except ClientError as e:
             print(f"[ERROR] Failed to update display status: {e}")
+            print(f"[DEBUG] Status data: {status_data}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def get_pending_commands(self, user_id: str, display_id: str) -> Dict[str, Dict[str, Any]]:
