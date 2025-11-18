@@ -297,12 +297,17 @@ class PanelSenaPlayer:
             payload = command.get('payload', {})
 
             print(f"[INFO] Executing command: {command_type}")
+            print(f"[DEBUG] Payload: {payload}")
 
             if command_type == 'play':
                 if 'scheduleId' in payload:
-                    self.load_and_play_schedule(payload['scheduleId'])
+                    # Check if we have full schedule data in payload
+                    schedule_data = payload.get('scheduleData')
+                    self.load_and_play_schedule(payload['scheduleId'], schedule_data)
                 elif 'contentId' in payload:
-                    self.play_single_content(payload['contentId'])
+                    # Check if we have full content data in payload
+                    content_data = payload.get('contentData')
+                    self.play_single_content(payload['contentId'], content_data)
 
             elif command_type == 'pause':
                 self.pause_playback()
@@ -348,31 +353,56 @@ class PanelSenaPlayer:
             except Exception as update_error:
                 print(f"[ERROR] Failed to update command status: {update_error}")
 
-    def load_and_play_schedule(self, schedule_id):
-        """Load schedule from API and start playback"""
+    def load_and_play_schedule(self, schedule_id, schedule_data=None):
+        """Load schedule from DynamoDB and start playback"""
         try:
             print(f"[INFO] Loading schedule: {schedule_id}")
 
-            # For now, we'll need to get the schedule data from the API
-            # Since the Raspberry Pi doesn't have direct database access,
-            # we'll use a simplified approach or fetch from API
+            # Use provided schedule_data if available (from command payload)
+            if not schedule_data:
+                # Fallback to fetching from DynamoDB (legacy support)
+                if not self.user_id:
+                    print("[ERROR] Cannot load schedule - user_id not set")
+                    self.update_status("error", "User ID not configured")
+                    return
 
-            # TODO: Implement API call to fetch schedule data
-            # For now, we'll assume the schedule data is passed in the command payload
-            print(f"[WARN] Schedule loading not fully implemented - needs API integration")
+                schedule_data = self.dynamodb_client.get_schedule(self.user_id, schedule_id)
+                
+                if not schedule_data:
+                    print(f"[ERROR] Schedule not found: {schedule_id}")
+                    self.update_status("error", f"Schedule not found: {schedule_id}")
+                    return
 
-            # Placeholder - in a real implementation, you'd make an API call like:
-            # response = requests.get(f"{API_BASE_URL}/api/schedules/{schedule_id}")
-            # if response.status_code == 200:
-            #     schedule_data = response.json()
-            #     # Process schedule data...
+            print(f"[INFO] Schedule loaded: {schedule_data.get('name')}")
 
-            self.update_status("error", f"Schedule loading not implemented: {schedule_id}")
-            return
+            # Set current schedule
+            self.current_schedule = {
+                'id': schedule_id,
+                'name': schedule_data.get('name', 'Unnamed Schedule')
+            }
 
-        except Exception as e:
-            print(f"[ERROR] Failed to load schedule: {e}")
-            self.update_status("error", f"Failed to load schedule: {str(e)}")
+            # Get content from schedule - prefer 'content' array with full data
+            content_list = schedule_data.get('content', [])
+            
+            if content_list:
+                # We have full content data, use it directly
+                print(f"[INFO] Schedule has {len(content_list)} content items with full data")
+                self.content_queue = content_list  # Store full content objects
+                self.current_index = 0
+                self.play_from_queue_with_data()
+            else:
+                # Fallback to content IDs only (legacy)
+                content_ids = schedule_data.get('contentIds', [])
+                
+                if not content_ids:
+                    print(f"[WARN] Schedule has no content items")
+                    self.update_status("error", "Schedule has no content")
+                    return
+
+                print(f"[INFO] Schedule has {len(content_ids)} content IDs (legacy mode)")
+                self.content_queue = content_ids
+                self.current_index = 0
+                self.play_from_queue()
 
         except Exception as e:
             print(f"[ERROR] Failed to load schedule: {e}")
@@ -380,23 +410,69 @@ class PanelSenaPlayer:
             traceback.print_exc()
             self.update_status("error", str(e))
 
-    def play_single_content(self, content_id):
+    def play_single_content(self, content_id, content_data=None):
         """Play a single content item"""
         try:
             print(f"[INFO] Playing content: {content_id}")
 
-            # TODO: Implement API call to fetch content metadata
-            # For now, we'll use a simplified approach
-            print(f"[WARN] Content loading not fully implemented - needs API integration")
+            # Use provided content_data if available (from command payload)
+            if not content_data:
+                # Fallback to fetching from DynamoDB (legacy support)
+                if not self.user_id:
+                    print("[ERROR] Cannot play content - user_id not set")
+                    self.update_status("error", "User ID not configured")
+                    return
 
-            # Placeholder - in a real implementation, you'd make an API call like:
-            # response = requests.get(f"{API_BASE_URL}/api/content/{content_id}")
-            # if response.status_code == 200:
-            #     content_data = response.json()
-            #     # Process content data...
+                content_data = self.dynamodb_client.get_content_item(self.user_id, content_id)
+                
+                if not content_data:
+                    print(f"[ERROR] Content not found: {content_id}")
+                    self.update_status("error", f"Content not found: {content_id}")
+                    return
 
-            self.update_status("error", f"Content loading not implemented: {content_id}")
-            return
+            print(f"[INFO] Content loaded: {content_data.get('name')}")
+            print(f"[DEBUG] Content type: {content_data.get('type')}")
+            print(f"[DEBUG] Content URL: {content_data.get('url')}")
+            print(f"[DEBUG] Storage ref: {content_data.get('storageRef')}")
+
+            # Prepare content info for playback
+            content_info = {
+                'id': content_id,
+                'name': content_data.get('name', 'Unnamed Content'),
+                'type': content_data.get('type', 'video'),
+                'url': content_data.get('url', ''),
+            }
+
+            # Determine storage path - prefer url, fallback to storageRef
+            storage_path = content_data.get('url') or content_data.get('storageRef')
+            
+            if not storage_path:
+                print(f"[ERROR] No URL or storage reference found for content")
+                self.update_status("error", "Content has no URL")
+                return
+
+            # Determine file extension
+            file_ext = self._get_file_extension(storage_path, content_data.get('type', 'video'))
+            
+            # Create local file path
+            local_filename = f"{content_id}{file_ext}"
+            local_path = os.path.join(CONTENT_DIR, local_filename)
+
+            # Download content if not already cached
+            if not os.path.exists(local_path):
+                print(f"[INFO] Content not in cache, downloading...")
+                if not self.download_content(storage_path, local_path):
+                    print(f"[ERROR] Failed to download content")
+                    self.update_status("error", "Failed to download content")
+                    return
+            else:
+                print(f"[INFO] Using cached content: {local_path}")
+
+            # Play the file
+            if self.play_file(local_path, content_info):
+                print(f"[INFO] Successfully started playback")
+            else:
+                print(f"[ERROR] Failed to start playback")
 
         except Exception as e:
             print(f"[ERROR] Failed to play content: {e}")
@@ -578,16 +654,39 @@ class PanelSenaPlayer:
             self.update_status("online")
 
     def play_from_queue(self):
-        """Play next content from queue"""
+        """Play next content from queue (content IDs only - legacy)"""
         if self.current_index < len(self.content_queue):
             content_id = self.content_queue[self.current_index]
-            # Play the content
+            print(f"[INFO] Playing content {self.current_index + 1}/{len(self.content_queue)} from queue: {content_id}")
+            # Play the content (will fetch metadata)
             self.play_single_content(content_id)
         else:
             # Loop back to start
+            print(f"[INFO] Reached end of queue, looping back to start")
             self.current_index = 0
             if self.content_queue:
                 self.play_from_queue()
+            else:
+                print(f"[INFO] Queue is empty, stopping playback")
+                self.stop_playback()
+
+    def play_from_queue_with_data(self):
+        """Play next content from queue (full content data objects)"""
+        if self.current_index < len(self.content_queue):
+            content_obj = self.content_queue[self.current_index]
+            content_id = content_obj.get('id')
+            print(f"[INFO] Playing content {self.current_index + 1}/{len(self.content_queue)} from queue: {content_id}")
+            # Play the content with full data already available
+            self.play_single_content(content_id, content_obj)
+        else:
+            # Loop back to start
+            print(f"[INFO] Reached end of queue, looping back to start")
+            self.current_index = 0
+            if self.content_queue:
+                self.play_from_queue_with_data()
+            else:
+                print(f"[INFO] Queue is empty, stopping playback")
+                self.stop_playback()
 
     def pause_playback(self):
         """Pause playback - not supported in subprocess mode"""
@@ -633,7 +732,15 @@ class PanelSenaPlayer:
             self.current_index += 1
             if self.current_index >= len(self.content_queue):
                 self.current_index = 0
-            self.play_from_queue()
+            
+            # Check if queue contains full content objects or just IDs
+            if isinstance(self.content_queue[0], dict):
+                # Full content data
+                self.play_from_queue_with_data()
+            else:
+                # Content IDs only
+                self.play_from_queue()
+            
             print(f"[INFO] Skipped to index {self.current_index}")
         else:
             print("[INFO] No content queue, stopping playback")

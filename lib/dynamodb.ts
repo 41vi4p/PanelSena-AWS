@@ -1,17 +1,58 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, ScanCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
 
-// Initialize DynamoDB client
-const client = new DynamoDBClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-  },
-})
+// Lazy initialization to avoid errors when imported in client-side code
+let dynamoDbInstance: DynamoDBDocumentClient | null = null
 
-// Create document client for easier operations
-export const dynamoDb = DynamoDBDocumentClient.from(client)
+function getDynamoDbClient(): DynamoDBDocumentClient {
+  // Return existing instance if already initialized
+  if (dynamoDbInstance) {
+    return dynamoDbInstance
+  }
+
+  // Only initialize on server side
+  if (typeof window !== 'undefined') {
+    throw new Error('DynamoDB client can only be initialized on the server side')
+  }
+
+  // Validate AWS credentials
+  const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID
+  const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY
+  const AWS_REGION = process.env.AWS_REGION || 'us-east-1'
+
+  if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
+    console.error('❌ AWS Credentials Missing!')
+    console.error('AWS_ACCESS_KEY_ID:', AWS_ACCESS_KEY_ID ? '✓ Set' : '✗ Missing')
+    console.error('AWS_SECRET_ACCESS_KEY:', AWS_SECRET_ACCESS_KEY ? '✓ Set' : '✗ Missing')
+    console.error('AWS_REGION:', AWS_REGION)
+    throw new Error('AWS credentials are not configured. Please check your .env file and restart the server.')
+  }
+
+  console.log('✓ AWS DynamoDB Client Initialized')
+  console.log('  Region:', AWS_REGION)
+  console.log('  Access Key ID:', AWS_ACCESS_KEY_ID.substring(0, 8) + '...')
+
+  // Initialize DynamoDB client
+  const client = new DynamoDBClient({
+    region: AWS_REGION,
+    credentials: {
+      accessKeyId: AWS_ACCESS_KEY_ID,
+      secretAccessKey: AWS_SECRET_ACCESS_KEY,
+    },
+  })
+
+  // Create document client for easier operations
+  dynamoDbInstance = DynamoDBDocumentClient.from(client)
+  return dynamoDbInstance
+}
+
+// Export getter for dynamic client
+export const dynamoDb = new Proxy({} as DynamoDBDocumentClient, {
+  get(target, prop) {
+    const client = getDynamoDbClient()
+    return (client as any)[prop]
+  }
+})
 
 // Table names
 export const TABLES = {

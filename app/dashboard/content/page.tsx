@@ -9,7 +9,6 @@ import { useAuth } from "@/hooks/use-auth"
 import { useContent } from "@/hooks/use-content"
 import { useDisplays } from "@/hooks/use-displays"
 import { ContentItem } from "@/lib/types"
-import { sendPlaybackCommand } from "@/lib/dynamodb-realtime"
 
 export default function ContentPage() {
   const { user } = useAuth()
@@ -47,13 +46,28 @@ export default function ContentPage() {
       const contentItem = content.find(c => c.id === contentId)
       if (!contentItem) return
 
-      await sendPlaybackCommand(user.uid, displayId, {
-        type: 'play',
-        displayId,
-        payload: {
-          contentId: contentItem.id,
-        }
+      // Use API route instead of direct import
+      const response = await fetch('/api/live-playback/command', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.uid,
+          displayId,
+          command: {
+            type: 'play',
+            displayId,
+            payload: {
+              contentId: contentItem.id,
+            }
+          }
+        })
       })
+
+      if (!response.ok) {
+        throw new Error('Failed to send play command')
+      }
       
       alert(`Playing "${contentItem.name}" on display`)
     } catch (error) {

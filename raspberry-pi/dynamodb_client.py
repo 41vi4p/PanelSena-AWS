@@ -273,3 +273,57 @@ class DynamoDBClient:
         except ClientError as e:
             print(f"[ERROR] Failed to cleanup old commands: {e}")
             return False
+
+    def get_content_item(self, user_id: str, content_id: str) -> Optional[Dict[str, Any]]:
+        """Get content item details from DynamoDB"""
+        try:
+            # Content is stored in a Content table with structure similar to other tables
+            content_table = self.dynamodb.Table('PanelSena-Content')
+            
+            # Query for the content item
+            key = {
+                'pk': f'CONTENT#{user_id}',
+                'sk': f'ITEM#{content_id}'
+            }
+            
+            response = content_table.get_item(Key=key)
+            
+            if 'Item' in response:
+                item = response['Item']
+                # Remove DynamoDB keys
+                content_data = {k: v for k, v in item.items() if k not in ['pk', 'sk']}
+                return content_data
+            else:
+                print(f"[WARN] Content not found: {content_id}")
+                return None
+                
+        except ClientError as e:
+            print(f"[ERROR] Failed to get content item: {e}")
+            return None
+
+    def get_schedule(self, user_id: str, schedule_id: str) -> Optional[Dict[str, Any]]:
+        """Get schedule details from DynamoDB"""
+        try:
+            # Schedule is stored in a Schedules table
+            schedules_table = self.dynamodb.Table('PanelSena-Schedules')
+            
+            # Query for the schedule
+            key = {
+                'pk': f'SCHEDULE#{user_id}',
+                'sk': f'SCHEDULE#{schedule_id}'
+            }
+            
+            response = schedules_table.get_item(Key=key)
+            
+            if 'Item' in response:
+                item = response['Item']
+                # Remove DynamoDB keys
+                schedule_data = {k: v for k, v in item.items() if k not in ['pk', 'sk']}
+                return schedule_data
+            else:
+                print(f"[WARN] Schedule not found: {schedule_id}")
+                return None
+                
+        except ClientError as e:
+            print(f"[ERROR] Failed to get schedule: {e}")
+            return None

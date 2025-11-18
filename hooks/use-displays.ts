@@ -12,18 +12,33 @@ export function useDisplays(userId: string | undefined) {
       return
     }
 
+    // Initial load
     loadDisplays()
+
+    // Poll for updates every 5 seconds to get real-time status
+    const pollInterval = setInterval(() => {
+      loadDisplays()
+    }, 5000)
+
+    return () => {
+      clearInterval(pollInterval)
+    }
   }, [userId])
 
   const loadDisplays = async () => {
     if (!userId) return
 
-    setLoading(true)
+    // Only show loading on initial load
+    if (displays.length === 0) {
+      setLoading(true)
+    }
+    
     try {
       const response = await fetch(`/api/displays?userId=${encodeURIComponent(userId)}`)
       if (!response.ok) throw new Error('Failed to load displays')
       const displaysData = await response.json()
       setDisplays(displaysData)
+      setError(null)
     } catch (error) {
       console.error('Error loading displays:', error)
       setError('Failed to load displays')
