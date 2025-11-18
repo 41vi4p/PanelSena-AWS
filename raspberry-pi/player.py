@@ -215,9 +215,12 @@ class PanelSenaPlayer:
             else:
                 status_data['schedule'] = None
 
-            # Add error message if provided
+            # Add error message if provided, or explicitly clear it
             if error_message:
                 status_data['errorMessage'] = error_message
+            else:
+                # Explicitly clear any previous error message
+                status_data['errorMessage'] = None
 
             print(f"[DEBUG] Setting DynamoDB status data...")
             success = self.dynamodb_client.update_display_status(self.user_id, self.display_id, status_data)
