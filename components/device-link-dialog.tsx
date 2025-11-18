@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, CheckCircle, XCircle, Key, Monitor } from "lucide-react"
-import { linkDeviceToUser } from "@/lib/dynamodb-realtime"
 
 interface DeviceLinkDialogProps {
   open: boolean
@@ -46,9 +45,22 @@ export function DeviceLinkDialog({
     setSuccess(false)
 
     try {
-      const result = await linkDeviceToUser(deviceId, deviceKey, userId, displayId)
+      const response = await fetch('/api/devices/link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          deviceId,
+          deviceKey,
+          userId,
+          displayId,
+        }),
+      })
 
-      if (result.success) {
+      const data = await response.json()
+
+      if (response.ok && data.success) {
         setSuccess(true)
         
         // Call success handler immediately (before closing dialog)
@@ -66,9 +78,10 @@ export function DeviceLinkDialog({
           // Don't call onOpenChange(false) - parent handles closing
         }, 1500)
       } else {
-        setError(result.error || "Failed to link device")
+        setError(data.error || "Failed to link device")
       }
     } catch (err) {
+      console.error("Error linking device:", err)
       setError("An error occurred while linking the device")
     } finally {
       setLoading(false)
