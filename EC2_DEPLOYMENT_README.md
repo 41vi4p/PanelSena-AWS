@@ -40,7 +40,7 @@ The workflow will:
 5. Deploy and start the application as a systemd service
 6. Verify the deployment
 
-## Manual Deployment
+## Manual Deployment 
 
 You can also trigger deployment manually:
 1. Go to Actions tab in GitHub
