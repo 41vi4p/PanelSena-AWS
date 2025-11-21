@@ -88,9 +88,11 @@ Waiting for device to be linked...
   "device_id": "DEVICE_20251031143055_A7K9",
   "device_key": "k3mN9pQ2rT5vW8xY1zB4cD6eF9gH2jK5",
   "display_name": "Raspberry Pi Display - Main",
-  "database_url": "https://panelsena-default-rtdb.firebaseio.com",
-  "storage_bucket": "panelsena.firebasestorage.app",
-  "service_account_path": "serviceAccountKey.json"
+  "aws_region": "us-east-1",
+  "dynamodb_table": "panelsena-devices",
+  "s3_bucket": "panelsena-content-bucket",
+  "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+  "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 }
 ```
 
@@ -148,12 +150,12 @@ sudo systemctl restart panelsena.service
 
 ### Connection Error
 
-**Problem:** "Failed to initialize Firebase"
+**Problem:** "Failed to initialize AWS"
 
 ✅ **Solution:**
-- Verify `serviceAccountKey.json` exists
+- Verify AWS credentials are correct
 - Check internet connection: `ping google.com`
-- Verify database_url is correct
+- Verify DynamoDB table name and region
 
 ---
 
@@ -180,9 +182,9 @@ sudo systemctl restart panelsena.service
 ## 🔐 Security Notes
 
 - **Keep Device Key secret** - Don't share publicly
-- **Service account key** - Never commit to Git
-- **Firestore rules** - Configured automatically
-- **HTTPS** - Firebase uses secure connections
+- **AWS credentials** - Never commit to Git, use IAM roles when possible
+- **DynamoDB permissions** - Use least privilege IAM policies
+- **HTTPS** - AWS SDK uses secure connections
 
 ---
 

@@ -1,13 +1,13 @@
 # Logging Implementation Summary
 
 ## Overview
-This document outlines the complete logging functionality implementation for PanelSena v1.7.2.
+This document outlines the complete logging functionality implementation for PanelSena v1.7.2, using AWS DynamoDB for activity storage.
 
 ## What Was Implemented
 
 ### 1. **Logs Page Integration** (`app/dashboard/logs/page.tsx`)
-- ✅ Connected to Firebase using `useActivities` hook
-- ✅ Real-time activity updates from Firestore
+- ✅ Connected to AWS DynamoDB using `useActivities` hook
+- ✅ Real-time activity updates from DynamoDB streams
 - ✅ Activity type to log severity mapping (info, warning, error, success)
 - ✅ Search functionality across actions and descriptions
 - ✅ Filter by log type (All, Success, Warning, Error)
@@ -103,17 +103,39 @@ interface LogEntry {
 - Relative time display (e.g., "2m ago", "5h ago", "3d ago")
 - Automatic formatting based on age of log entry
 
-## Database Collections
+## Database Structure
 
-### Firestore Collection: `activities`
-Path: `users/{userId}/activities/{activityId}`
+### DynamoDB Table: `panelsena-activities`
 
-Fields:
-- `type`: Activity category (display/content/schedule/system)
-- `action`: Short action name
-- `description`: Detailed description
-- `metadata`: Additional contextual data
-- `timestamp`: ISO 8601 timestamp
+**Primary Key:**
+- Partition Key: `userId` (String)
+- Sort Key: `activityId` (String)
+
+**Global Secondary Index (GSI):**
+- Partition Key: `userId` (String)
+- Sort Key: `timestamp` (String) - for time-based queries
+
+**Attributes:**
+```typescript
+interface Activity {
+  userId: string
+  activityId: string
+  type: 'display' | 'content' | 'schedule' | 'system'
+  action: string           // e.g., "Display Created"
+  description: string      // e.g., "Created new display 'Main Lobby'"
+  metadata?: {            // Optional additional data
+    displayName?: string
+    displayId?: string
+    contentName?: string
+    contentType?: string
+    scheduleName?: string
+    scheduleId?: string
+    error?: string
+  }
+  timestamp: string        // ISO 8601 timestamp
+  ttl?: number            // For automatic cleanup
+}
+```
 
 ## Usage Examples
 
@@ -150,24 +172,25 @@ await logActivity(
 )
 ```
 
-### From Firestore
+### From DynamoDB Operations
 ```typescript
 // Create activity
 await createActivity(userId, activityData)
 
-// Subscribe to activities
-const unsubscribe = subscribeToActivities(userId, callback, limit)
-
-// Get user activities
+// Query activities by user (using GSI)
 const activities = await getUserActivities(userId, limit)
+
+// Get activities by time range
+const activities = await getActivitiesByTimeRange(userId, startTime, endTime)
 ```
 
 ## Performance Considerations
 
 - **Limit**: Default 100 activities loaded (configurable via `limit` parameter)
-- **Real-time**: Uses Firestore real-time listeners for instant updates
-- **Indexing**: Activities ordered by timestamp (descending)
-- **Cleanup**: Old activities can be archived/deleted via Firebase Functions
+- **Real-time**: Uses DynamoDB Streams for instant updates when enabled
+- **Indexing**: GSI on timestamp enables efficient time-based queries
+- **Cleanup**: TTL attribute for automatic cleanup of old activities
+- **Partitioning**: User-based partitioning ensures good performance per user
 
 ## Future Enhancements
 
@@ -206,4 +229,4 @@ To verify logging is working:
 ## Version
 Implemented in: **PanelSena v1.7.2**
 
-Last Updated: 2024
+Last Updated: November 2025 (AWS Migration)

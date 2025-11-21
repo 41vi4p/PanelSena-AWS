@@ -302,7 +302,7 @@ chmod 600 config.json  # Keep config secure
 
 ## Content Storage
 
-Content is automatically downloaded from Firebase Storage to the `content/` directory:
+Content is automatically downloaded from AWS S3 to the `content/` directory:
 - Videos: `.mp4`, `.avi`, `.mkv`
 - Images: `.jpg`, `.png`, `.gif`
 - Documents: `.pdf`

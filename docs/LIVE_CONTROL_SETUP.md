@@ -2,16 +2,16 @@
 
 ## Overview
 
-This document explains the new **Live Playback Control** feature added to PanelSena, which allows you to monitor and control digital signage displays in real-time using Firebase Realtime Database. It includes a web dashboard for control and a Python script for Raspberry Pi devices.
+This document explains the new **Live Playback Control** feature added to PanelSena, which allows you to monitor and control digital signage displays in real-time using AWS DynamoDB. It includes a web dashboard for control and a Python script for Raspberry Pi devices.
 
 ## What Was Implemented
 
 ### 1. Backend Infrastructure
 
-#### Firebase Realtime Database Integration
-- **File**: `lib/firebase.ts`
-- Added Firebase Realtime Database to the existing Firebase configuration
-- Exports `realtimeDb` instance for use throughout the app
+#### AWS DynamoDB Integration
+- **File**: `lib/dynamodb-realtime.ts`
+- Added AWS DynamoDB to replace Firebase Realtime Database
+- Exports DynamoDB client for use throughout the app
 
 #### TypeScript Types
 - **File**: `lib/types.ts`
@@ -20,7 +20,7 @@ This document explains the new **Live Playback Control** feature added to PanelS
 - `PlaybackCommand`: Commands sent from dashboard to devices
 
 #### Realtime Database Helper Functions
-- **File**: `lib/realtime-db.ts`
+- **File**: `lib/dynamodb-realtime.ts`
 - `updateDisplayStatus()`: Update display status in real-time
 - `listenToDisplayStatus()`: Subscribe to status changes
 - `listenToAllDisplaysStatus()`: Monitor all displays
@@ -63,16 +63,16 @@ This document explains the new **Live Playback Control** feature added to PanelS
 
 #### Python Player Script
 - **File**: `raspberry-pi/player.py`
-- Connects to Firebase Realtime Database
+- Connects to AWS DynamoDB
 - Listens for playback commands
-- Downloads content from Firebase Storage
+- Downloads content from AWS S3
 - Plays media using VLC
 - Reports status back to dashboard
 - Automatic heartbeat every 10 seconds
 - Command execution with error handling
 
 #### Supporting Files
-- `raspberry-pi/requirements.txt`: Python dependencies
+- `raspberry-pi/requirements.txt`: Python dependencies (includes boto3)
 - `raspberry-pi/config.example.json`: Configuration template
 - `raspberry-pi/install.sh`: Automated installation script
 - `raspberry-pi/README.md`: Comprehensive setup guide
@@ -92,18 +92,18 @@ This document explains the new **Live Playback Control** feature added to PanelS
 │  └──────────────────────────────────────────────────────┘  │
 └───────────────────────┬──────────────────────────────────────┘
                         │
-                        │ Firebase SDK
+                        │ AWS SDK
                         │
         ┌───────────────▼───────────────┐
-        │   Firebase Realtime Database  │
+        │        AWS DynamoDB            │
         │                               │
-        │  /users/{uid}/                │
-        │    /displays/{displayId}/     │
-        │      /status                  │
-        │      /commands                │
+        │  Table: panelsena-devices      │
+        │  - device_id (PK)             │
+        │  - data_type (SK)             │
+        │  - status, commands, etc.     │
         └───────────────┬───────────────┘
                         │
-                        │ Firebase Admin SDK
+                        │ AWS SDK (boto3)
                         │
 ┌───────────────────────▼───────────────────────────────────┐
 │              Raspberry Pi Device(s)                        │
@@ -111,7 +111,7 @@ This document explains the new **Live Playback Control** feature added to PanelS
 │                                                            │
 │  ┌────────────────────────────────────────────────────┐  │
 │  │  1. Listen for commands                            │  │
-│  │  2. Download content from Firebase Storage         │  │
+│  │  2. Download content from AWS S3                   │  │
 │  │  3. Play content using VLC                         │  │
 │  │  4. Report status back                             │  │
 │  │  5. Send heartbeat every 10s                       │  │
@@ -121,53 +121,75 @@ This document explains the new **Live Playback Control** feature added to PanelS
 
 ## Database Structure
 
-### Realtime Database Paths
+### DynamoDB Table: `panelsena-devices`
 
+**Primary Key:**
+- Partition Key: `device_id` (String)
+- Sort Key: `data_type` (String)
+
+**Data Types and Attributes:**
+
+#### Status Records (`data_type = "status"`)
+```json
+{
+  "device_id": "display-001",
+  "data_type": "status",
+  "displayName": "Main Display",
+  "status": "online" | "offline" | "playing" | "paused" | "error",
+  "currentContent": {
+    "id": "content-123",
+    "name": "Welcome Video.mp4",
+    "type": "video",
+    "url": "https://s3.amazonaws.com/bucket/content-123.mp4",
+    "startedAt": 1703123456789
+  },
+  "schedule": {
+    "id": "schedule-456",
+    "name": "Morning Schedule",
+    "contentQueue": ["content-123", "content-789"],
+    "currentIndex": 0
+  },
+  "lastHeartbeat": 1703123456789,
+  "volume": 80,
+  "errorMessage": "Optional error description",
+  "ttl": 1703213456789
+}
 ```
-users/
-  {userId}/
-    displays/
-      {displayId}/
-        status/
-          displayId: string
-          displayName: string
-          status: "online" | "offline" | "playing" | "paused" | "error"
-          currentContent:
-            id: string
-            name: string
-            type: string
-            url: string
-            startedAt: timestamp
-          schedule:
-            id: string
-            name: string
-            contentQueue: string[]
-            currentIndex: number
-          lastHeartbeat: timestamp
-          volume: number
-          errorMessage?: string
-        commands/
-          {commandId}/
-            commandId: string
-            displayId: string
-            type: "play" | "pause" | "stop" | "skip" | "volume" | "restart"
-            payload:
-              contentId?: string
-              volume?: number
-              scheduleId?: string
-            timestamp: number
-            status: "pending" | "executed" | "failed"
-            result?: string
-    devices/
-      {displayId}/
-        displayId: string
-        userId: string
-        deviceToken: string
-        lastSeen: timestamp
-        ipAddress: string
-        macAddress: string
-        osVersion: string
-        appVersion: string
+
+#### Command Records (`data_type = "command"`)
+```json
+{
+  "device_id": "display-001",
+  "data_type": "command",
+  "commandId": "cmd-789",
+  "type": "play" | "pause" | "stop" | "skip" | "volume" | "restart",
+  "payload": {
+    "contentId": "content-123",
+    "volume": 80,
+    "scheduleId": "schedule-456"
+  },
+  "timestamp": 1703123456789,
+  "status": "pending" | "executed" | "failed",
+  "result": "Optional execution result",
+  "ttl": 1703213456789
+}
+```
+
+#### Device Info Records (`data_type = "device_info"`)
+```json
+{
+  "device_id": "display-001",
+  "data_type": "device_info",
+  "userId": "user-123",
+  "displayName": "Main Display",
+  "deviceToken": "secure-random-token",
+  "lastSeen": 1703123456789,
+  "ipAddress": "192.168.1.100",
+  "macAddress": "B8:27:EB:12:34:56",
+  "osVersion": "Raspberry Pi OS 11 (Bullseye)",
+  "appVersion": "1.7.2",
+  "ttl": 1703213456789
+}
 ```
 
 ## Setup Instructions
@@ -176,35 +198,31 @@ users/
 
 1. **Update Environment Variables**
 
-   Add to `.env`:
+   Add to `.env.local`:
    ```env
-   NEXT_PUBLIC_FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
+   # AWS Configuration
+   AWS_ACCESS_KEY_ID=your_access_key_id_here
+   AWS_SECRET_ACCESS_KEY=your_secret_access_key_here
+   AWS_REGION=us-east-1
+   DYNAMODB_TABLE_NAME=panelsena-devices
+   S3_BUCKET_NAME=your-bucket-name
    ```
 
-2. **Enable Firebase Realtime Database**
+2. **Create DynamoDB Table**
 
-   - Go to Firebase Console
-   - Navigate to Realtime Database
-   - Click "Create Database"
-   - Choose your region
-   - Set rules (see below)
+   Follow the [DynamoDB Setup Guide](DYNAMODB_SETUP_GUIDE.md) to create the `panelsena-devices` table with proper configuration.
 
-3. **Set Database Rules**
+3. **Create S3 Bucket**
 
-   ```json
-   {
-     "rules": {
-       "users": {
-         "$uid": {
-           ".read": "$uid === auth.uid",
-           ".write": "$uid === auth.uid"
-         }
-       }
-     }
-   }
-   ```
+   Follow the [AWS Setup Guide](AWS_SETUP.md) to create an S3 bucket for content storage.
 
-4. **Build and Deploy**
+4. **Configure IAM Permissions**
+
+   Ensure your IAM user has permissions for:
+   - DynamoDB read/write access to `panelsena-devices` table
+   - S3 read/write access to your content bucket
+
+5. **Build and Deploy**
 
    ```bash
    npm install
@@ -235,19 +253,21 @@ users/
    ./install.sh
    ```
 
-3. **Configure Firebase**
+3. **Configure AWS**
 
-   - Download service account key from Firebase Console
-   - Copy to `~/panelsena/serviceAccountKey.json`
+   - Create IAM user with DynamoDB and S3 permissions (see AWS Setup Guide)
+   - Copy AWS credentials to Raspberry Pi
    - Edit `config.json` with your details:
      ```json
      {
        "user_id": "your-user-id",
        "display_id": "display-001",
        "display_name": "Main Display",
-       "database_url": "https://your-project.firebaseio.com",
-       "storage_bucket": "your-project.appspot.com",
-       "service_account_path": "serviceAccountKey.json"
+       "aws_region": "us-east-1",
+       "dynamodb_table": "panelsena-devices",
+       "s3_bucket": "your-bucket-name",
+       "aws_access_key_id": "your-access-key-id",
+       "aws_secret_access_key": "your-secret-access-key"
      }
      ```
 
@@ -315,38 +335,39 @@ users/
 ### Display Not Appearing in Dashboard
 
 1. Check `config.json` has correct `user_id` and `display_id`
-2. Verify Firebase credentials are valid
+2. Verify AWS credentials are valid and have proper permissions
 3. Check network connectivity
 4. View logs: `sudo journalctl -u panelsena.service -f`
 
 ### Commands Not Executing
 
 1. Check Raspberry Pi is online
-2. Verify Firebase Realtime Database rules
-3. Check command status in Firebase Console
+2. Verify DynamoDB table name and AWS region match
+3. Check command status in DynamoDB console
 4. Review player logs for errors
 
 ### Content Not Playing
 
-1. Verify content exists in Firebase Storage
+1. Verify content exists in S3 bucket
 2. Check file format is supported (.mp4, .jpg, .png)
 3. Ensure VLC is installed: `vlc --version`
 4. Test VLC manually: `vlc --no-xlib test.mp4`
 
 ### Connection Issues
 
-1. Check database URL in `.env` and `config.json`
-2. Verify internet connectivity
-3. Check Firebase Realtime Database is enabled
-4. Review database rules
+1. Check AWS region in `.env.local` and `config.json`
+2. Verify IAM permissions include DynamoDB and S3 access
+3. Check internet connectivity
+4. Review AWS CloudTrail for access errors
 
 ## Security Considerations
 
-1. **Service Account Key**: Keep `serviceAccountKey.json` secure and never commit to Git
-2. **Database Rules**: Ensure rules only allow authenticated users to access their own data
-3. **Network Security**: Use secure WiFi and consider VPN for remote displays
-4. **Physical Security**: Secure Raspberry Pi devices to prevent tampering
-5. **Regular Updates**: Keep OS and packages updated
+1. **AWS Credentials**: Keep access keys secure and never commit to Git. Use IAM roles for EC2 instances.
+2. **DynamoDB Access**: Use least privilege IAM policies for DynamoDB table access.
+3. **S3 Security**: Keep buckets private with proper bucket policies.
+4. **Network Security**: Use secure WiFi and consider VPC for remote displays.
+5. **Physical Security**: Secure Raspberry Pi devices to prevent tampering.
+6. **Regular Updates**: Keep OS, dependencies, and AWS SDKs updated.
 
 ## Performance Optimization
 
@@ -387,19 +408,18 @@ For issues or questions:
 ## File Summary
 
 ### Web App Files Created/Modified:
-- `lib/firebase.ts` - Added Realtime Database
+- `lib/dynamodb-realtime.ts` - AWS DynamoDB real-time operations (NEW)
 - `lib/types.ts` - Added live playback types
-- `lib/realtime-db.ts` - Realtime Database helpers (NEW)
 - `hooks/use-live-playback.ts` - Live playback hook (NEW)
 - `app/dashboard/live-control/page.tsx` - Live control page (NEW)
 - `components/sidebar.tsx` - Added Live Control menu item
 
 ### Raspberry Pi Files Created:
-- `raspberry-pi/player.py` - Main player script
-- `raspberry-pi/requirements.txt` - Python dependencies
-- `raspberry-pi/config.example.json` - Configuration template
+- `raspberry-pi/player.py` - Main player script (updated for AWS)
+- `raspberry-pi/requirements.txt` - Python dependencies (includes boto3)
+- `raspberry-pi/config.example.json` - Configuration template (AWS config)
 - `raspberry-pi/install.sh` - Installation script
-- `raspberry-pi/README.md` - Setup guide
+- `raspberry-pi/README.md` - Setup guide (updated for AWS)
 
 ## License
 

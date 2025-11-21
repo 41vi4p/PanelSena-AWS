@@ -8,7 +8,8 @@ Welcome to the PanelSena documentation! This folder contains comprehensive guide
 
 - **[Quick Start Guide](../raspberry-pi/QUICK_START.md)** - 5-minute Raspberry Pi setup
 - **[Main README](../README.md)** - Project overview and features
-- **[Firebase Setup](../FIREBASE_SETUP.md)** - Firebase configuration guide
+- **[AWS Setup](AWS_SETUP.md)** - AWS services configuration guide
+- **[DynamoDB Setup](DYNAMODB_SETUP_GUIDE.md)** - Database setup guide
 
 ### Live Playback Control
 
@@ -45,7 +46,7 @@ Welcome to the PanelSena documentation! This folder contains comprehensive guide
 - **[Raspberry Pi README](../raspberry-pi/README.md)** - Complete Pi setup guide
   - Hardware requirements
   - Software installation
-  - Firebase configuration
+  - AWS configuration
   - Auto-start setup
   - Display configuration
 
@@ -59,7 +60,7 @@ Welcome to the PanelSena documentation! This folder contains comprehensive guide
 ### For First-Time Users
 
 1. Start with [Main README](../README.md)
-2. Follow [Firebase Setup](../FIREBASE_SETUP.md)
+2. Follow [AWS Setup](AWS_SETUP.md)
 3. Use [Quick Start Guide](../raspberry-pi/QUICK_START.md) for Raspberry Pi
 
 ### For Developers
@@ -85,12 +86,15 @@ Welcome to the PanelSena documentation! This folder contains comprehensive guide
 ```
 PanelSena/
 ├── README.md                          # Main project overview
-├── FIREBASE_SETUP.md                  # Firebase configuration
+├── AWS_SETUP.md                       # AWS services configuration
+├── DYNAMODB_SETUP_GUIDE.md            # Database setup guide
+├── EC2_DEPLOYMENT_README.md           # EC2 deployment guide
 ├── INTEGRATION_SUMMARY.md             # Integration details
 │
 ├── docs/                              # 📁 Documentation folder (you are here)
 │   ├── README.md                      # This file
 │   ├── LIVE_CONTROL_SETUP.md          # Live control system
+│   ├── LOGGING_IMPLEMENTATION.md      # Logging system implementation
 │   ├── IMPLEMENTATION_SUMMARY.md      # Technical implementation
 │   ├── DEVICE_AUTHENTICATION.md       # Device auth guide
 │   └── DEVICE_AUTH_IMPLEMENTATION.md  # Device auth technical details
@@ -212,7 +216,7 @@ Most issues are covered in:
 
 For additional help:
 1. Check the relevant documentation file
-2. Review Firebase Console for errors
+2. Review AWS Console for errors
 3. Check player logs: `sudo journalctl -u panelsena.service -f`
 
 ## 📝 Contributing

@@ -44,7 +44,7 @@ PanelSena is a comprehensive cloud-based digital signage management system that 
 - 🚀 **Easy Setup** - Get your first display running in minutes
 - 💰 **Cost-Effective** - Uses affordable Raspberry Pi devices
 - ☁️ **Cloud-Based** - Access from anywhere, no on-premise servers
-- 🔒 **Secure** - Device-based authentication and Firebase security
+- 🔒 **Secure** - Device-based authentication and AWS IAM security
 - 📊 **Analytics** - Real-time monitoring and performance metrics
 - 🎨 **Modern UI** - Beautiful, responsive interface built with Next.js
 - 🔄 **Real-Time** - Live updates and instant content changes
@@ -65,7 +65,7 @@ PanelSena is a comprehensive cloud-based digital signage management system that 
 
 ### 📁 Content Management
 - Upload images, videos, and documents
-- Firebase Storage integration with CDN
+- AWS S3 integration with CDN
 - Content categorization and search
 - Upload progress tracking
 - Thumbnail generation
@@ -103,7 +103,7 @@ PanelSena is a comprehensive cloud-based digital signage management system that 
 - Protected routes with middleware
 - User data isolation
 - Device-based authentication
-- Firebase security rules
+- AWS IAM security policies
 - Secure credential management
 
 ### 🎨 User Experience
@@ -416,7 +416,8 @@ System automatically tracks metrics like display uptime, content views, and user
 
 ## 📚 Documentation
 
-- **[Firebase Setup Guide](FIREBASE_SETUP.md)** - Complete Firebase configuration
+- **[AWS Setup Guide](docs/AWS_SETUP.md)** - Complete AWS services configuration
+- **[DynamoDB Setup Guide](docs/DYNAMODB_SETUP_GUIDE.md)** - Database setup and configuration
 - **[Device Authentication](docs/DEVICE_AUTHENTICATION.md)** - Device linking system
 - **[Live Control Setup](docs/LIVE_CONTROL_SETUP.md)** - Real-time playback control
 - **[Raspberry Pi Guide](raspberry-pi/README.md)** - Pi setup and configuration
@@ -537,7 +538,7 @@ Comprehensive documentation is available in the `docs/` folder:
 
 ### Getting Started
 - **[Quick Start Guide](raspberry-pi/QUICK_START.md)** - 5-minute Raspberry Pi setup
-- **[AWS Setup Guide](AWS_SETUP.md)** - AWS configuration guide
+- **[AWS Setup Guide](docs/AWS_SETUP.md)** - AWS configuration guide
 
 ### Features & Implementation
 - **[Live Control System](docs/LIVE_CONTROL_SETUP.md)** - Real-time playback control guide
@@ -553,7 +554,7 @@ Comprehensive documentation is available in the `docs/` folder:
 
 ## Troubleshooting
 
-See [AWS_SETUP.md](./AWS_SETUP.md) for common issues and solutions.
+See [docs/AWS_SETUP.md](docs/AWS_SETUP.md) for common issues and solutions.
 
 For specific issues:
 - **Live Control**: [docs/LIVE_CONTROL_SETUP.md#troubleshooting](docs/LIVE_CONTROL_SETUP.md#troubleshooting)
